@@ -3,9 +3,12 @@
   "name": "qagent-test-registry",
   "main": "src/index.js",
   "compatibility_date": "2026-01-14",
+  "workers_dev": false,
   "vars": {
     "ENVIRONMENT": "development",
-    "SERVICE_NAME": "qagent-test-registry"
+    "SERVICE_NAME": "qagent-test-registry",
+    "TEST_REGISTRY_MAX_SPEC_BYTES": "262144",
+    "TEST_REGISTRY_MAX_REQUEST_BYTES": "393216"
   },
   "d1_databases": [
     {

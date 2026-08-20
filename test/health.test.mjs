@@ -3,7 +3,7 @@ import test from "node:test";
 
 import worker, { buildHealthPayload, handleRequest } from "../src/index.js";
 
-test("07.6.5-A health payload exposes the Test Artifact Plane identity", () => {
+test("07.6.5 health payload preserves the Test Artifact Plane identity", () => {
   assert.deepEqual(buildHealthPayload({ ENVIRONMENT: "development" }), {
     status: "ok",
     service: "qagent-test-registry",
@@ -53,12 +53,13 @@ test("health rejects methods other than GET", async () => {
   assert.equal((await response.json()).code, "TEST_REGISTRY_METHOD_NOT_ALLOWED");
 });
 
-test("unknown data routes are not exposed in Foundation 07.6.5-A", async () => {
+test("internal append route rejects GET and advertises POST", async () => {
   const response = await handleRequest(
     new Request("https://registry.internal/v1/test-registry/test-designs/versions"),
     {},
   );
 
-  assert.equal(response.status, 404);
-  assert.equal((await response.json()).code, "TEST_REGISTRY_ROUTE_NOT_FOUND");
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("allow"), "POST");
+  assert.equal((await response.json()).code, "TEST_REGISTRY_METHOD_NOT_ALLOWED");
 });

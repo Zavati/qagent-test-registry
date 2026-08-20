@@ -1,3 +1,10 @@
+import { asTestRegistryError } from "./domain/errors.js";
+import {
+  appendVersionRoute,
+  exactVersionRoute,
+  latestVersionRoute,
+} from "./routes/testDesignRoutes.js";
+
 const SERVICE_NAME = "qagent-test-registry";
 const FOUNDATION = "07.6.5";
 const ROLE = "test-artifact-plane";
@@ -41,6 +48,19 @@ function methodNotAllowed(allowed) {
   );
 }
 
+function errorResponse(error) {
+  const safe = asTestRegistryError(error);
+  const body = {
+    status: "error",
+    code: safe.code,
+    message: safe.message,
+    retryable: safe.retryable,
+  };
+  if (safe.path) body.path = safe.path;
+  if (safe.details) body.details = safe.details;
+  return json(body, { status: safe.status });
+}
+
 export function buildHealthPayload(env = {}) {
   return {
     status: "ok",
@@ -51,18 +71,51 @@ export function buildHealthPayload(env = {}) {
   };
 }
 
+function matchLatestRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/endpoints\/([^/]+)\/test-design\/latest$/);
+  if (!match) return null;
+  return { projectId: decodeURIComponent(match[1]), endpointId: decodeURIComponent(match[2]) };
+}
+
+function matchExactVersionRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/test-designs\/([^/]+)\/versions\/([^/]+)$/);
+  if (!match) return null;
+  return { testDesignId: decodeURIComponent(match[1]), version: decodeURIComponent(match[2]) };
+}
+
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
 
-  if (url.pathname === "/v1/test-registry/health") {
-    if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
+  try {
+    if (url.pathname === "/v1/test-registry/health") {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      return json(buildHealthPayload(env), { status: 200 });
     }
 
-    return json(buildHealthPayload(env), { status: 200 });
-  }
+    if (url.pathname === "/v1/test-registry/test-designs/versions") {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      const result = await appendVersionRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
 
-  return notFound();
+    const latestParams = matchLatestRoute(url.pathname);
+    if (latestParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await latestVersionRoute(request, env, latestParams);
+      return json(result.body, { status: result.status });
+    }
+
+    const exactParams = matchExactVersionRoute(url.pathname);
+    if (exactParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await exactVersionRoute(request, env, exactParams);
+      return json(result.body, { status: result.status });
+    }
+
+    return notFound();
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 export default {

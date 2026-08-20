@@ -1,33 +1,31 @@
 # qagent-test-registry
 
-QAgent Test Artifact Plane service introduced by Foundation **07.6.5**.
+QAgent **Test Artifact Plane** introduced by Foundation **07.6.5**.
 
-This repository starts with **07.6.5-A — Test Registry Service Foundation** only.
+Current implementation level: **07.6.5-B — D1 Schema + Immutable Versioning**.
 
 ## Responsibility
 
-The service will become the source of truth for immutable, versioned Test Designs (`qagent.test-spec.v1`).
+`qagent-test-registry` is the source of truth for immutable, versioned Test Designs (`qagent.test-spec.v1`).
 
-In 07.6.5-A it contains only:
+It owns:
 
-- Worker foundation;
-- public health endpoint;
-- dedicated D1 binding contract (`TEST_REGISTRY_DB`);
-- safe default routing (no data routes yet);
-- unit/config tests;
-- GitHub Actions deployment workflow.
+- one logical Test Design root per Organization + Project + Endpoint;
+- immutable Version N artifacts;
+- latest-version pointer;
+- deterministic Test Design identity;
+- idempotency by `generationRequestId`;
+- exact immutable version retrieval for the future Runner.
 
-Persistence, immutable version allocation and retrieval are intentionally deferred to 07.6.5-B and later subphases.
+It does not own AI generation, prompts, Catalog knowledge, execution, or execution results.
 
-The bootstrap Worker currently has no data routes. Before 07.6.5-B exposes internal data handlers, public ingress must be reviewed so those handlers remain Service-Binding-only (or otherwise explicitly protected).
-
-## Health
+## Public health
 
 ```http
 GET /v1/test-registry/health
 ```
 
-Expected response:
+Expected:
 
 ```json
 {
@@ -39,6 +37,88 @@ Expected response:
 }
 ```
 
+## Internal data API
+
+For Service Binding use only:
+
+```http
+POST /v1/test-registry/test-designs/versions
+GET  /v1/test-registry/projects/:projectId/endpoints/:endpointId/test-design/latest
+GET  /v1/test-registry/test-designs/:testDesignId/versions/:version
+```
+
+Internal requests use tenant scope headers:
+
+```text
+X-QAgent-Organization-Id
+X-QAgent-Project-Id
+```
+
+Do not expose a public `/v1/test-registry/*` wildcard route.
+
+`workers_dev` is disabled so internal data handlers are not reachable through a Worker development hostname after deploy.
+
+## D1
+
+Binding:
+
+```text
+TEST_REGISTRY_DB
+```
+
+Development DB:
+
+```text
+qagent-test-registry-dev
+```
+
+Migration:
+
+```text
+migrations/0001_test_registry_foundation.sql
+```
+
+Apply manually with:
+
+```bash
+npx wrangler d1 migrations apply TEST_REGISTRY_DB --remote
+```
+
+GitHub Actions also applies pending migrations before Worker deploy.
+
+## Persistence model
+
+```text
+test_designs
+  -> logical root / latest pointer
+
+test_design_versions
+  -> immutable qagent.test-spec.v1 versions
+```
+
+A new real generation creates:
+
+```text
+Version N + 1
+```
+
+A retry of the same:
+
+```text
+generationRequestId
+```
+
+returns the already persisted version.
+
+## Limits
+
+Defaults:
+
+```text
+TEST_REGISTRY_MAX_SPEC_BYTES=262144
+TEST_REGISTRY_MAX_REQUEST_BYTES=393216
+```
+
 ## Local validation
 
 ```bash
@@ -46,36 +126,22 @@ npm ci
 npm test
 ```
 
-## D1 bootstrap before first deploy
+## Deployment config
 
-Create the development database:
-
-```bash
-npx wrangler d1 create qagent-test-registry-dev
-```
-
-Copy the returned `database_id` into `wrangler.jsonc`, replacing:
-
-```text
-REPLACE_WITH_QAGENT_TEST_REGISTRY_DEV_DATABASE_ID
-```
-
-Then validate deploy configuration:
+The repository snapshot uses a database ID placeholder. Replace it with the real existing D1 UUID before deploy, then run:
 
 ```bash
 npm run check:deploy-config
 ```
 
-No schema migration is introduced in 07.6.5-A. `0001_test_registry_foundation.sql` belongs to 07.6.5-B.
-
-## Deploy
-
-```bash
-npm run deploy
-```
-
-Do not expose future Registry data routes directly to the browser. The intended access path remains:
+## Architecture
 
 ```text
-Console -> Gateway -> Cloudflare Service Binding -> qagent-test-registry
+Console
+  -> Gateway
+     -> Cloudflare Service Binding
+        -> qagent-test-registry
+           -> TEST_REGISTRY_DB
 ```
+
+Gateway integration begins in **07.6.5-C**.
