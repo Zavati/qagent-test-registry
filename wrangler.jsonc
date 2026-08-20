@@ -14,7 +14,7 @@
     {
       "binding": "TEST_REGISTRY_DB",
       "database_name": "qagent-test-registry-dev",
-      "database_id": "REPLACE_WITH_QAGENT_TEST_REGISTRY_DEV_DATABASE_ID",
+      "database_id": "5d6a1abf-512e-4f47-b86c-c80f8c10117c",
       "migrations_dir": "migrations"
     }
   ],
