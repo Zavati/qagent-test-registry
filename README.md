@@ -2,7 +2,7 @@
 
 QAgent **Test Artifact Plane** introduced by Foundation **07.6.5**.
 
-Current implementation level: **07.6.5-B — D1 Schema + Immutable Versioning**.
+Current implementation level: **07.6.5-F — Production Validation + Runner Contract Freeze**.
 
 ## Responsibility
 
@@ -12,10 +12,11 @@ It owns:
 
 - one logical Test Design root per Organization + Project + Endpoint;
 - immutable Version N artifacts;
-- latest-version pointer;
+- latest-version pointer for Console retrieval;
 - deterministic Test Design identity;
 - idempotency by `generationRequestId`;
-- exact immutable version retrieval for the future Runner.
+- exact immutable historical retrieval;
+- a frozen least-privilege immutable artifact contract for the future Runner.
 
 It does not own AI generation, prompts, Catalog knowledge, execution, or execution results.
 
@@ -39,12 +40,13 @@ Expected:
 
 ## Internal data API
 
-For Service Binding use only:
+For Cloudflare Service Binding use only:
 
 ```http
 POST /v1/test-registry/test-designs/versions
 GET  /v1/test-registry/projects/:projectId/endpoints/:endpointId/test-design/latest
 GET  /v1/test-registry/test-designs/:testDesignId/versions/:version
+GET  /v1/test-registry/runner/test-design-versions/:testDesignVersionId
 ```
 
 Internal requests use tenant scope headers:
@@ -56,7 +58,36 @@ X-QAgent-Project-Id
 
 Do not expose a public `/v1/test-registry/*` wildcard route.
 
-`workers_dev` is disabled so internal data handlers are not reachable through a Worker development hostname after deploy.
+`workers_dev` is disabled so data handlers are not reachable through a Worker development hostname after deploy.
+
+## Future Runner contract — frozen v1
+
+A future Runner pins one immutable:
+
+```text
+testDesignVersionId = tdv_...
+```
+
+and reads it with:
+
+```http
+GET /v1/test-registry/runner/test-design-versions/:testDesignVersionId
+```
+
+Envelope contract:
+
+```text
+qagent.runner-test-artifact.v1
+```
+
+The Runner must never resolve `latest` at execution time.
+
+See:
+
+```text
+RUNNER-CONTRACT-07.6.5-F.md
+contracts/qagent.runner-test-artifact.v1.schema.json
+```
 
 ## D1
 
@@ -78,13 +109,7 @@ Migration:
 migrations/0001_test_registry_foundation.sql
 ```
 
-Apply manually with:
-
-```bash
-npx wrangler d1 migrations apply TEST_REGISTRY_DB --remote
-```
-
-GitHub Actions also applies pending migrations before Worker deploy.
+No new migration is required by 07.6.5-F.
 
 ## Persistence model
 
@@ -96,19 +121,9 @@ test_design_versions
   -> immutable qagent.test-spec.v1 versions
 ```
 
-A new real generation creates:
+A new real generation creates `Version N + 1`.
 
-```text
-Version N + 1
-```
-
-A retry of the same:
-
-```text
-generationRequestId
-```
-
-returns the already persisted version.
+A retry of the same `generationRequestId` returns the already persisted version.
 
 ## Limits
 
@@ -124,11 +139,22 @@ TEST_REGISTRY_MAX_REQUEST_BYTES=393216
 ```bash
 npm ci
 npm test
+npm run check:deploy-config
 ```
+
+## Production D1 invariant audit
+
+```bash
+npm run db:audit:remote
+```
+
+The audit must return zero rows for all invariant violations.
+
+See `PRODUCTION-VALIDATION-07.6.5-F.md`.
 
 ## Deployment config
 
-The repository snapshot uses a database ID placeholder. Replace it with the real existing D1 UUID before deploy, then run:
+The distributable snapshot uses a database ID placeholder. Preserve/restore the real D1 UUID before deploy, then run:
 
 ```bash
 npm run check:deploy-config
@@ -142,6 +168,8 @@ Console
      -> Cloudflare Service Binding
         -> qagent-test-registry
            -> TEST_REGISTRY_DB
-```
 
-Gateway integration begins in **07.6.5-C**.
+Future Runner
+  -> Cloudflare Service Binding
+     -> pinned tdv_* immutable artifact
+```

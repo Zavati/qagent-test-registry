@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qagent.runner-test-artifact.v1",
+  "title": "QAgent Runner Test Artifact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "data"],
+  "properties": {
+    "status": { "const": "ok" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "artifact"],
+      "properties": {
+        "contractVersion": { "const": "qagent.runner-test-artifact.v1" },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "testDesignId",
+            "testDesignVersionId",
+            "version",
+            "organizationId",
+            "projectId",
+            "endpointId",
+            "contextFingerprint",
+            "specificationVersion",
+            "createdAt",
+            "specification"
+          ],
+          "properties": {
+            "testDesignId": { "type": "string", "pattern": "^td_[0-9a-f]{64}$" },
+            "testDesignVersionId": { "type": "string", "pattern": "^tdv_[A-Za-z0-9_-]{8,160}$" },
+            "version": { "type": "integer", "minimum": 1 },
+            "organizationId": { "type": "string", "minLength": 1 },
+            "projectId": { "type": "string", "minLength": 1 },
+            "endpointId": { "type": "string", "minLength": 1 },
+            "contextFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "specificationVersion": { "const": "qagent.test-spec.v1" },
+            "createdAt": { "type": "string", "minLength": 1 },
+            "specification": {
+              "type": "object",
+              "required": ["contractVersion", "specificationVersion", "source", "summary", "scenarios", "generation"],
+              "properties": {
+                "contractVersion": { "const": "qagent.test-design.v1" },
+                "specificationVersion": { "const": "qagent.test-spec.v1" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

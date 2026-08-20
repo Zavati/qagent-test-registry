@@ -3,6 +3,7 @@ import {
   appendVersionRoute,
   exactVersionRoute,
   latestVersionRoute,
+  runnerArtifactRoute,
 } from "./routes/testDesignRoutes.js";
 
 const SERVICE_NAME = "qagent-test-registry";
@@ -83,6 +84,12 @@ function matchExactVersionRoute(pathname) {
   return { testDesignId: decodeURIComponent(match[1]), version: decodeURIComponent(match[2]) };
 }
 
+function matchRunnerArtifactRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/runner\/test-design-versions\/([^/]+)$/);
+  if (!match) return null;
+  return { testDesignVersionId: decodeURIComponent(match[1]) };
+}
+
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
 
@@ -109,6 +116,13 @@ export async function handleRequest(request, env = {}) {
     if (exactParams) {
       if (request.method !== "GET") return methodNotAllowed(["GET"]);
       const result = await exactVersionRoute(request, env, exactParams);
+      return json(result.body, { status: result.status });
+    }
+
+    const runnerParams = matchRunnerArtifactRoute(url.pathname);
+    if (runnerParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await runnerArtifactRoute(request, env, runnerParams);
       return json(result.body, { status: result.status });
     }
 

@@ -1,4 +1,5 @@
 import { TestRegistryError } from "../domain/errors.js";
+import { RUNNER_TEST_ARTIFACT_CONTRACT_VERSION } from "../domain/contracts.js";
 import { createTestDesignRepository } from "../repository/testDesignRepository.js";
 import {
   registryLimits,
@@ -116,6 +117,54 @@ export async function exactVersionRoute(request, env, { testDesignId, version })
     body: {
       status: "ok",
       data: { version: artifact },
+    },
+  };
+}
+
+export async function runnerArtifactRoute(request, env, { testDesignVersionId }) {
+  const scope = validateInternalTenantHeaders(request);
+  if (!/^tdv_[A-Za-z0-9_-]{8,160}$/.test(testDesignVersionId)) {
+    throw new TestRegistryError("Test Design version id is invalid.", {
+      code: "TEST_DESIGN_VERSION_ID_INVALID",
+      status: 400,
+      path: "path.testDesignVersionId",
+    });
+  }
+
+  const repository = createTestDesignRepository(env.TEST_REGISTRY_DB);
+  const artifact = await repository.getVersionById({
+    organizationId: scope.organizationId,
+    projectId: scope.projectId,
+    testDesignVersionId,
+  });
+
+  if (!artifact) {
+    // Deliberately use 404 for both missing and cross-scope artifacts.
+    throw new TestRegistryError("Test Design version not found.", {
+      code: "TEST_DESIGN_VERSION_NOT_FOUND",
+      status: 404,
+    });
+  }
+
+  return {
+    status: 200,
+    body: {
+      status: "ok",
+      data: {
+        contractVersion: RUNNER_TEST_ARTIFACT_CONTRACT_VERSION,
+        artifact: {
+          testDesignId: artifact.testDesignId,
+          testDesignVersionId: artifact.id,
+          version: artifact.version,
+          organizationId: artifact.organizationId,
+          projectId: artifact.projectId,
+          endpointId: artifact.endpointId,
+          contextFingerprint: artifact.contextFingerprint,
+          specificationVersion: artifact.specificationVersion,
+          createdAt: artifact.createdAt,
+          specification: artifact.specification,
+        },
+      },
     },
   };
 }

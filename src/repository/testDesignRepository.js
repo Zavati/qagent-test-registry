@@ -148,6 +148,19 @@ export function createTestDesignRepository(db, {
     return mapVersion(row);
   }
 
+  async function getVersionById({ organizationId, projectId, testDesignVersionId }) {
+    const row = await first(
+      db,
+      `SELECT ${VERSION_COLUMNS}
+       FROM test_design_versions
+       WHERE id = ?
+         AND organization_id = ? AND project_id = ?
+       LIMIT 1`,
+      [testDesignVersionId, organizationId, projectId],
+    );
+    return mapVersion(row);
+  }
+
   async function appendVersion(input) {
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
@@ -310,6 +323,7 @@ export function createTestDesignRepository(db, {
     appendVersion,
     getLatest,
     getExactVersion,
+    getVersionById,
     getRootByScope,
     getVersionByGenerationRequestId,
   };
