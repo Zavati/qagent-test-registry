@@ -1,0 +1,19 @@
+{
+  "name": "qagent-test-registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "QAgent Test Artifact Plane - immutable Test Design registry foundation.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check:deploy-config": "node scripts/verify-deploy-config.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "wrangler": "^4.59.2"
+  }
+}

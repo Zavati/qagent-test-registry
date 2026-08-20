@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "qagent-test-registry",
+  "main": "src/index.js",
+  "compatibility_date": "2026-01-14",
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SERVICE_NAME": "qagent-test-registry"
+  },
+  "d1_databases": [
+    {
+      "binding": "TEST_REGISTRY_DB",
+      "database_name": "qagent-test-registry-dev",
+      "database_id": "REPLACE_WITH_QAGENT_TEST_REGISTRY_DEV_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  }
+}
