@@ -62,6 +62,7 @@ Do not expose a public `/v1/test-registry/*` wildcard route.
 
 ## Future Runner contract — frozen v1
 
+
 A future Runner pins one immutable:
 
 ```text
