@@ -13,3 +13,13 @@ export async function buildStableTestDesignId({ organizationId, projectId, endpo
 export function createTestDesignVersionId() {
   return `tdv_${crypto.randomUUID()}`;
 }
+
+export async function buildStableAutoProjectSuiteId({ organizationId, projectId }) {
+  const canonicalIdentity = JSON.stringify([organizationId, projectId, "AUTO_PROJECT_READY"]);
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(canonicalIdentity));
+  return `suite_${bytesToHex(new Uint8Array(digest))}`;
+}
+
+export function createTestSuiteVersionId() {
+  return `suitev_${crypto.randomUUID()}`;
+}

@@ -5,9 +5,14 @@ import {
   latestVersionRoute,
   runnerArtifactRoute,
 } from "./routes/testDesignRoutes.js";
+import {
+  latestAutoReadySuiteRoute,
+  materializeAutoReadySuiteRoute,
+  projectTestInventoryRoute,
+} from "./routes/suiteRoutes.js";
 
 const SERVICE_NAME = "qagent-test-registry";
-const FOUNDATION = "07.6.5";
+const FOUNDATION = "07.7.10-A";
 const ROLE = "test-artifact-plane";
 
 function json(data, init = {}) {
@@ -90,6 +95,25 @@ function matchRunnerArtifactRoute(pathname) {
   return { testDesignVersionId: decodeURIComponent(match[1]) };
 }
 
+
+function matchProjectInventoryRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/test-inventory$/);
+  if (!match) return null;
+  return { projectId: decodeURIComponent(match[1]) };
+}
+
+function matchAutoSuiteMaterializeRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/suites\/auto-ready\/materialize$/);
+  if (!match) return null;
+  return { projectId: decodeURIComponent(match[1]) };
+}
+
+function matchAutoSuiteLatestRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/suites\/auto-ready\/latest$/);
+  if (!match) return null;
+  return { projectId: decodeURIComponent(match[1]) };
+}
+
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
 
@@ -102,6 +126,27 @@ export async function handleRequest(request, env = {}) {
     if (url.pathname === "/v1/test-registry/test-designs/versions") {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       const result = await appendVersionRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
+
+    const inventoryParams = matchProjectInventoryRoute(url.pathname);
+    if (inventoryParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await projectTestInventoryRoute(request, env, inventoryParams);
+      return json(result.body, { status: result.status });
+    }
+
+    const materializeParams = matchAutoSuiteMaterializeRoute(url.pathname);
+    if (materializeParams) {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      const result = await materializeAutoReadySuiteRoute(request, env, materializeParams);
+      return json(result.body, { status: result.status });
+    }
+
+    const latestSuiteParams = matchAutoSuiteLatestRoute(url.pathname);
+    if (latestSuiteParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await latestAutoReadySuiteRoute(request, env, latestSuiteParams);
       return json(result.body, { status: result.status });
     }
 

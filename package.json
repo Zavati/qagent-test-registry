@@ -1,16 +1,18 @@
 {
   "name": "qagent-test-registry",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "QAgent Test Artifact Plane - immutable Test Design registry foundation.",
+  "description": "QAgent Test Artifact Plane - immutable Test Designs and Suite definitions.",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "check:deploy-config": "node scripts/verify-deploy-config.mjs",
     "db:migrations:apply": "wrangler d1 migrations apply TEST_REGISTRY_DB --remote",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:audit:remote": "wrangler d1 execute TEST_REGISTRY_DB --remote --file=scripts/production-audit-07.6.5-f.sql"
+    "db:audit:remote": "wrangler d1 execute TEST_REGISTRY_DB --remote --file=scripts/production-audit-07.6.5-f.sql",
+    "test:f07-7-10-a": "node --test test/suite-foundation-07.7.10-a.test.mjs",
+    "check:07.7.10-a": "npm test && npm run test:f07-7-10-a && npm run check:deploy-config"
   },
   "engines": {
     "node": ">=24"
