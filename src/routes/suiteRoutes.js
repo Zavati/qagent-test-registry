@@ -38,3 +38,18 @@ export async function latestAutoReadySuiteRoute(request, env, { projectId }) {
   });
   return { status: 200, body: { status: "ok", data: result } };
 }
+
+
+export async function suiteExecutionSliceRoute(request, env, { projectId, suiteVersionId }) {
+  const scope = validateInternalTenantHeaders(request, { projectId });
+  const url = new URL(request.url);
+  const repository = createSuiteRepository(env.TEST_REGISTRY_DB);
+  const data = await repository.getSuiteExecutionSlice({
+    organizationId: scope.organizationId,
+    projectId,
+    suiteVersionId,
+    offset: url.searchParams.get("offset") || 0,
+    limit: url.searchParams.get("limit") || 10,
+  });
+  return { status: 200, body: { status: "ok", data } };
+}

@@ -3,11 +3,11 @@ import test from "node:test";
 
 import worker, { buildHealthPayload, handleRequest } from "../src/index.js";
 
-test("07.7.10-A FIX-1 health payload preserves the Test Artifact Plane identity", () => {
+test("07.7.10-B health payload preserves the Test Artifact Plane identity", () => {
   assert.deepEqual(buildHealthPayload({ ENVIRONMENT: "development" }), {
     status: "ok",
     service: "qagent-test-registry",
-    foundation: "07.7.10-A-FIX-1",
+    foundation: "07.7.10-B",
     role: "test-artifact-plane",
     environment: "development",
   });
@@ -26,7 +26,7 @@ test("GET /v1/test-registry/health returns 200 and no-store JSON", async () => {
   const body = await response.json();
   assert.equal(body.status, "ok");
   assert.equal(body.service, "qagent-test-registry");
-  assert.equal(body.foundation, "07.7.10-A-FIX-1");
+  assert.equal(body.foundation, "07.7.10-B");
   assert.equal(body.role, "test-artifact-plane");
 });
 

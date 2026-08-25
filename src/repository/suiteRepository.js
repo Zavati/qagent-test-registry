@@ -11,12 +11,14 @@ import {
   AUTO_SUITE_TYPE,
   PROJECT_TEST_INVENTORY_CONTRACT_VERSION,
   SUITE_EXECUTION_ELIGIBILITY_POLICY_VERSION,
+  SUITE_EXECUTION_SLICE_CONTRACT_VERSION,
   TEST_SUITE_CONTRACT_VERSION,
   TEST_SUITE_VERSION_CONTRACT_VERSION,
 } from "../domain/suiteContracts.js";
 
 const encoder = new TextEncoder();
 const PROJECTION_BACKFILL_BATCH_SIZE = 50;
+const SUITE_ITEM_BACKFILL_BATCH_SIZE = 50;
 
 function bytesToHex(bytes) {
   return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
@@ -452,6 +454,110 @@ export function createSuiteRepository(db, {
     return { exists: true, suite, version };
   }
 
+
+  async function ensureSuiteVersionItems({ organizationId, projectId, version }) {
+    if (!version?.suiteVersionId) {
+      throw new TestRegistryError("Suite version is required for execution item materialization.", {
+        code: "TEST_SUITE_VERSION_REQUIRED", status: 400, retryable: false,
+      });
+    }
+    const countRow = await db.prepare(`
+      SELECT COUNT(*) AS item_count
+      FROM test_suite_version_items
+      WHERE organization_id = ? AND project_id = ? AND suite_version_id = ?
+    `).bind(organizationId, projectId, version.suiteVersionId).first();
+    const existingCount = Number(countRow?.item_count || 0);
+    if (existingCount === Number(version.endpointCount || 0)) return { backfilled: false, itemCount: existingCount };
+
+    // Legacy suite versions are normalized lazily once. selection_json remains the immutable source of truth.
+    const full = version.selectionIncluded ? version : await getVersionById({
+      organizationId, projectId, suiteVersionId: version.suiteVersionId, includeSelection: true,
+    });
+    if (!full || !Array.isArray(full.selection)) {
+      throw new TestRegistryError("Immutable Suite selection is unavailable.", {
+        code: "TEST_SUITE_SELECTION_MISSING", status: 500, retryable: false,
+      });
+    }
+    const createdAt = full.createdAt || now().toISOString();
+    const statements = full.selection.map((item, ordinal) => db.prepare(`
+      INSERT OR IGNORE INTO test_suite_version_items (
+        suite_version_id, suite_id, organization_id, project_id, ordinal,
+        endpoint_id, test_design_id, test_design_version_id, test_design_version,
+        scenario_count, scenario_ids_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      full.suiteVersionId, full.suiteId, organizationId, projectId, ordinal,
+      item.endpointId, item.testDesignId, item.testDesignVersionId, item.testDesignVersion,
+      Array.isArray(item.scenarioIds) ? item.scenarioIds.length : 0,
+      JSON.stringify(Array.isArray(item.scenarioIds) ? item.scenarioIds : []),
+      createdAt,
+    ));
+    for (let offset = 0; offset < statements.length; offset += SUITE_ITEM_BACKFILL_BATCH_SIZE) {
+      await db.batch(statements.slice(offset, offset + SUITE_ITEM_BACKFILL_BATCH_SIZE));
+    }
+    return { backfilled: true, itemCount: full.selection.length };
+  }
+
+  async function warmSuiteVersionItemsIfAvailable({ organizationId, projectId, version }) {
+    try {
+      return await ensureSuiteVersionItems({ organizationId, projectId, version });
+    } catch (error) {
+      // Rolling deploy compatibility: 07.7.10-A code/tests can run before migration 0004 exists.
+      // Only the absence of the new projection table is tolerated; every other error stays fail-closed.
+      if (/no such table:\s*test_suite_version_items/i.test(String(error?.message || error || ""))) {
+        return { backfilled: false, itemCount: 0, unavailable: true };
+      }
+      throw error;
+    }
+  }
+
+  async function getSuiteExecutionSlice({ organizationId, projectId, suiteVersionId, offset = 0, limit = 10 }) {
+    const safeOffset = Math.max(0, Math.floor(Number(offset) || 0));
+    const safeLimit = Math.max(1, Math.min(25, Math.floor(Number(limit) || 10)));
+    const version = await getVersionById({ organizationId, projectId, suiteVersionId, includeSelection: false });
+    if (!version) {
+      throw new TestRegistryError("Test Suite version not found.", {
+        code: "TEST_SUITE_VERSION_NOT_FOUND", status: 404, retryable: false,
+      });
+    }
+    if (version.selectionPolicy !== AUTO_SUITE_SELECTION_POLICY || version.selectionPolicyVersion !== AUTO_SUITE_SELECTION_POLICY_VERSION) {
+      throw new TestRegistryError("Suite version is not eligible for automatic execution.", {
+        code: "TEST_SUITE_EXECUTION_POLICY_UNSUPPORTED", status: 409, retryable: false,
+      });
+    }
+    const normalized = await ensureSuiteVersionItems({ organizationId, projectId, version });
+    const response = await db.prepare(`
+      SELECT ordinal, endpoint_id, test_design_id, test_design_version_id,
+             test_design_version, scenario_count, scenario_ids_json
+      FROM test_suite_version_items
+      WHERE organization_id = ? AND project_id = ? AND suite_version_id = ?
+      ORDER BY ordinal ASC
+      LIMIT ? OFFSET ?
+    `).bind(organizationId, projectId, suiteVersionId, safeLimit, safeOffset).all();
+    const items = (response?.results || []).map((row) => ({
+      ordinal: Number(row.ordinal), endpointId: row.endpoint_id, testDesignId: row.test_design_id,
+      testDesignVersionId: row.test_design_version_id, testDesignVersion: Number(row.test_design_version),
+      scenarioCount: Number(row.scenario_count), scenarioIds: parseJson(row.scenario_ids_json, {
+        details: { field: "scenario_ids_json", suiteVersionId, ordinal: Number(row.ordinal) }, fallback: [],
+      }),
+    }));
+    const totalItems = Number(version.endpointCount || 0);
+    const nextOffset = safeOffset + items.length;
+    return {
+      contractVersion: SUITE_EXECUTION_SLICE_CONTRACT_VERSION,
+      organizationId, projectId,
+      suite: {
+        suiteId: version.suiteId, suiteVersionId: version.suiteVersionId, version: version.version,
+        inventoryFingerprint: version.inventoryFingerprint, selectionPolicy: version.selectionPolicy,
+        selectionPolicyVersion: version.selectionPolicyVersion, endpointCount: version.endpointCount,
+        scenarioCount: version.scenarioCount,
+      },
+      offset: safeOffset, limit: safeLimit, totalItems, items,
+      nextOffset, hasMore: nextOffset < totalItems,
+      projection: { mode: "NORMALIZED_IMMUTABLE_SUITE_ITEMS", lazyBackfilled: normalized.backfilled },
+    };
+  }
+
   async function materializeAutoReadySuite({ organizationId, projectId }) {
     const inventory = await buildProjectInventory({ organizationId, projectId });
     if (!inventory.executable) {
@@ -499,6 +605,10 @@ export function createSuiteRepository(db, {
       if (suite.latestVersionId) {
         const latest = await getVersionById({ organizationId, projectId, suiteVersionId: suite.latestVersionId });
         if (latest?.inventoryFingerprint === inventory.inventoryFingerprint) {
+          // Foundation 07.7.10-B: explicit materialization also warms the normalized
+          // immutable execution projection. Legacy Suite versions pay this cost once;
+          // orchestration then reads only bounded rows.
+          await warmSuiteVersionItemsIfAvailable({ organizationId, projectId, version: latest });
           return {
             contractVersion: TEST_SUITE_CONTRACT_VERSION,
             created: false,
@@ -549,6 +659,7 @@ export function createSuiteRepository(db, {
         if (!isUniqueConstraintError(error)) throw error;
         const current = await getLatestAutoSuite({ organizationId, projectId });
         if (current.exists && current.version.inventoryFingerprint === inventory.inventoryFingerprint) {
+          await warmSuiteVersionItemsIfAvailable({ organizationId, projectId, version: current.version });
           return {
             contractVersion: TEST_SUITE_CONTRACT_VERSION,
             created: false,
@@ -574,6 +685,9 @@ export function createSuiteRepository(db, {
           retryable: true,
         });
       }
+      // New Suite versions are normalized at write time so future fan-out never
+      // reparses a large selection_json on the orchestration hot path.
+      await warmSuiteVersionItemsIfAvailable({ organizationId, projectId, version: persisted });
       const refreshedSuite = await getAutoSuiteRoot({ organizationId, projectId });
       return {
         contractVersion: TEST_SUITE_CONTRACT_VERSION,
@@ -597,6 +711,7 @@ export function createSuiteRepository(db, {
     getAutoSuiteRoot,
     getLatestAutoSuite,
     getVersionById,
+    getSuiteExecutionSlice,
     materializeAutoReadySuite,
   };
 }

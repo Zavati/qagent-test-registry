@@ -9,10 +9,11 @@ import {
   latestAutoReadySuiteRoute,
   materializeAutoReadySuiteRoute,
   projectTestInventoryRoute,
+  suiteExecutionSliceRoute,
 } from "./routes/suiteRoutes.js";
 
 const SERVICE_NAME = "qagent-test-registry";
-const FOUNDATION = "07.7.10-A-FIX-1";
+const FOUNDATION = "07.7.10-B";
 const ROLE = "test-artifact-plane";
 
 function json(data, init = {}) {
@@ -114,6 +115,13 @@ function matchAutoSuiteLatestRoute(pathname) {
   return { projectId: decodeURIComponent(match[1]) };
 }
 
+
+function matchSuiteExecutionSliceRoute(pathname) {
+  const match = pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/suite-versions\/([^/]+)\/execution-slice$/);
+  if (!match) return null;
+  return { projectId: decodeURIComponent(match[1]), suiteVersionId: decodeURIComponent(match[2]) };
+}
+
 export async function handleRequest(request, env = {}) {
   const url = new URL(request.url);
 
@@ -147,6 +155,14 @@ export async function handleRequest(request, env = {}) {
     if (latestSuiteParams) {
       if (request.method !== "GET") return methodNotAllowed(["GET"]);
       const result = await latestAutoReadySuiteRoute(request, env, latestSuiteParams);
+      return json(result.body, { status: result.status });
+    }
+
+
+    const suiteExecutionParams = matchSuiteExecutionSliceRoute(url.pathname);
+    if (suiteExecutionParams) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const result = await suiteExecutionSliceRoute(request, env, suiteExecutionParams);
       return json(result.body, { status: result.status });
     }
 
