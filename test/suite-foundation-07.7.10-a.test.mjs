@@ -8,6 +8,7 @@ import { SQLiteD1 } from "./helpers/sqliteD1.mjs";
 
 const migration1 = fs.readFileSync(new URL("../migrations/0001_test_registry_foundation.sql", import.meta.url), "utf8");
 const migration2 = fs.readFileSync(new URL("../migrations/0002_foundation_07_7_10_a_suite_definition.sql", import.meta.url), "utf8");
+const migration3 = fs.readFileSync(new URL("../migrations/0003_foundation_07_7_10_a_fix_1_execution_inventory_projection.sql", import.meta.url), "utf8");
 
 function headers(org = "org_test", project = "prj_test") {
   return {
@@ -58,6 +59,7 @@ test("07.7.10-A migration creates immutable Suite definition tables", () => {
   try {
     db.exec(migration1);
     db.exec(migration2);
+    db.exec(migration3);
     const rows = db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('test_suites','test_suite_versions') ORDER BY name").all();
     assert.deepEqual(rows.map((r) => r.name), ["test_suite_versions", "test_suites"]);
   } finally { db.close(); }
@@ -65,7 +67,7 @@ test("07.7.10-A migration creates immutable Suite definition tables", () => {
 
 
 test("07.7.10-A schema reserves multiple future USER_DEFINED suites while keeping one auto suite per project", () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2);
+  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
   try {
     const stamp = "2026-08-24T20:00:00.000Z";
     const sql = "INSERT INTO test_suites (id, organization_id, project_id, suite_type, name, status, latest_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', 0, ?, ?)";
@@ -78,7 +80,7 @@ test("07.7.10-A schema reserves multiple future USER_DEFINED suites while keepin
 
 test("Project Test Inventory uses only latest Test Design versions and exposes READY ids without request data", async () => {
   const db = new SQLiteD1();
-  db.exec(migration1); db.exec(migration2);
+  db.exec(migration1); db.exec(migration2); db.exec(migration3);
   try {
     const first = appendPayload({
       endpointId: "cep_a",
@@ -113,7 +115,7 @@ test("Project Test Inventory uses only latest Test Design versions and exposes R
 });
 
 test("Auto Project READY suite is stable, immutable and does not create a new version when inventory is unchanged", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2);
+  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
   try {
     const payload = appendPayload({
       endpointId: "cep_a",
@@ -162,7 +164,7 @@ test("Auto Project READY suite is stable, immutable and does not create a new ve
 });
 
 test("Auto suite materialization fails closed when the project has no READY scenarios and is tenant isolated", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2);
+  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
   try {
     const payload = appendPayload({
       endpointId: "cep_blocked",
@@ -173,7 +175,7 @@ test("Auto suite materialization fails closed when the project has no READY scen
     await append(db, payload);
     const response = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_test/suites/auto-ready/materialize", { method: "POST", headers: headers() }), env(db));
     assert.equal(response.status, 409);
-    assert.equal((await response.json()).code, "TEST_SUITE_NO_READY_SCENARIOS");
+    assert.equal((await response.json()).code, "TEST_SUITE_NO_EXECUTION_ELIGIBLE_SCENARIOS");
 
     const wrong = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_other/test-inventory", { headers: headers("org_test", "prj_test") }), env(db));
     assert.equal(wrong.status, 403);

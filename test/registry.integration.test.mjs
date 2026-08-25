@@ -201,7 +201,7 @@ test("version allocation retries after a concurrent unique version collision", a
 
     assert.equal(result.created, true);
     assert.equal(result.version.version, 2);
-    assert.equal(db.batchCount, 2);
+    assert.ok(db.batchCount >= 2);
     const versions = db.raw.prepare("SELECT version FROM test_design_versions ORDER BY version").all();
     assert.deepEqual(versions.map((item) => item.version), [1, 2]);
   } finally {

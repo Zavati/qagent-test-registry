@@ -12,7 +12,7 @@ import {
 } from "./routes/suiteRoutes.js";
 
 const SERVICE_NAME = "qagent-test-registry";
-const FOUNDATION = "07.7.10-A";
+const FOUNDATION = "07.7.10-A-FIX-1";
 const ROLE = "test-artifact-plane";
 
 function json(data, init = {}) {

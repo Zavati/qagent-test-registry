@@ -1,5 +1,6 @@
 import { TestRegistryError } from "../domain/errors.js";
 import { buildStableTestDesignId, createTestDesignVersionId } from "../domain/ids.js";
+import { buildTestDesignExecutionProjection, projectionInsertStatement } from "../domain/executionEligibility.js";
 
 const ROOT_BY_SCOPE_SQL = `
 SELECT id, organization_id, project_id, endpoint_id, status,
@@ -76,6 +77,10 @@ function mapVersion(row) {
 function isUniqueConstraintError(error) {
   const message = String(error?.message || error || "");
   return /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|SQLITE_CONSTRAINT_PRIMARYKEY/i.test(message);
+}
+
+function isMissingExecutionProjectionTableError(error) {
+  return /no such table:\s*test_design_execution_inventory/i.test(String(error?.message || error || ""));
 }
 
 async function first(db, sql, bindings = []) {
@@ -250,6 +255,18 @@ export function createTestDesignRepository(db, {
         createdAt,
       );
 
+      const executionProjection = buildTestDesignExecutionProjection({
+        specificationJson: input.specificationJson,
+        testDesignVersionId: versionId,
+        testDesignId: root.id,
+        organizationId: input.organizationId,
+        projectId: input.projectId,
+        endpointId: input.endpointId,
+        testDesignVersion: nextVersion,
+        createdAt,
+      });
+      const insertExecutionProjection = projectionInsertStatement(db, executionProjection);
+
       const updateRoot = db.prepare(
         `UPDATE test_designs
          SET latest_version = CASE WHEN latest_version < ? THEN ? ELSE latest_version END,
@@ -267,32 +284,40 @@ export function createTestDesignRepository(db, {
       );
 
       try {
-        await db.batch([insert, updateRoot]);
+        await db.batch([insert, insertExecutionProjection, updateRoot]);
       } catch (error) {
-        if (!isUniqueConstraintError(error)) throw error;
-
-        const replay = await getVersionByGenerationRequestId(input.generationRequestId);
-        if (replay) {
-          if (
-            replay.organizationId !== input.organizationId
-            || replay.projectId !== input.projectId
-            || replay.endpointId !== input.endpointId
-          ) {
-            throw new TestRegistryError("generationRequestId is already bound to another scope.", {
-              code: "TEST_REGISTRY_IDEMPOTENCY_SCOPE_MISMATCH",
-              status: 409,
-            });
+        // Rolling-deploy compatibility: old schema revisions can still accept immutable
+        // Test Designs before migration 0003 is applied. The projection is lazily
+        // backfilled once the new table exists; this prevents a deploy-order outage.
+        if (isMissingExecutionProjectionTableError(error)) {
+          await db.batch([insert, updateRoot]);
+        } else if (!isUniqueConstraintError(error)) {
+          throw error;
+        } else {
+          const replay = await getVersionByGenerationRequestId(input.generationRequestId);
+          if (replay) {
+            if (
+              replay.organizationId !== input.organizationId
+              || replay.projectId !== input.projectId
+              || replay.endpointId !== input.endpointId
+            ) {
+              throw new TestRegistryError("generationRequestId is already bound to another scope.", {
+                code: "TEST_REGISTRY_IDEMPOTENCY_SCOPE_MISMATCH",
+                status: 409,
+              });
+            }
+            return { created: false, idempotentReplay: true, version: replay };
           }
-          return { created: false, idempotentReplay: true, version: replay };
+
+          if (attempt < maxVersionRetries) continue;
+          throw new TestRegistryError("Could not allocate immutable Test Design version after retries.", {
+            code: "TEST_REGISTRY_VERSION_CONFLICT",
+            status: 409,
+            retryable: true,
+            details: { attempts: maxVersionRetries + 1 },
+          });
         }
 
-        if (attempt < maxVersionRetries) continue;
-        throw new TestRegistryError("Could not allocate immutable Test Design version after retries.", {
-          code: "TEST_REGISTRY_VERSION_CONFLICT",
-          status: 409,
-          retryable: true,
-          details: { attempts: maxVersionRetries + 1 },
-        });
       }
 
       const created = await getExactVersion({
