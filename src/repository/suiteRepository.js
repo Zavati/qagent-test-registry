@@ -299,17 +299,25 @@ export function createSuiteRepository(db, {
 
     const readyItems = items.filter((item) => item.readyScenarioCount > 0);
     const executableItems = items.filter((item) => item.executionEligibleScenarioCount > 0);
-    const selection = executableItems.map((item) => ({
+    // Foundation 07.7.10-B FIX-2: Suite definition expresses immutable test intent.
+    // Environment-specific execution eligibility belongs to Gateway/Run Control Plane.
+    const selection = readyItems.map((item) => ({
       endpointId: item.endpointId,
       testDesignId: item.testDesignId,
       testDesignVersionId: item.testDesignVersionId,
       testDesignVersion: item.testDesignVersion,
-      scenarioIds: [...item.executionEligibleScenarioIds],
+      scenarioIds: [...item.readyScenarioIds],
+    }));
+    // Fingerprint stays compact and deterministic even when view=compact omits scenario IDs.
+    // tdv_* is immutable, so (tdv + ready count) uniquely pins the READY selection for that version.
+    const fingerprintSelection = readyItems.map((item) => ({
+      endpointId: item.endpointId,
+      testDesignVersionId: item.testDesignVersionId,
+      readyScenarioCount: item.readyScenarioCount,
     }));
     const inventoryFingerprint = await sha256Hex(JSON.stringify({
-      eligibilityPolicyVersion: SUITE_EXECUTION_ELIGIBILITY_POLICY_VERSION,
       selectionPolicyVersion: AUTO_SUITE_SELECTION_POLICY_VERSION,
-      selection,
+      selection: fingerprintSelection,
     }));
 
     const totals = items.reduce((acc, item) => {
@@ -346,7 +354,7 @@ export function createSuiteRepository(db, {
       endpointWithReadyCount: readyItems.length,
       endpointWithExecutionEligibleCount: executableItems.length,
       ...totals,
-      executable: totals.executionEligibleScenarioCount > 0,
+      executable: totals.readyScenarioCount > 0,
       readyAvailable: totals.readyScenarioCount > 0,
       items,
       itemsTotal: items.length,
@@ -527,16 +535,20 @@ export function createSuiteRepository(db, {
     }
     const normalized = await ensureSuiteVersionItems({ organizationId, projectId, version });
     const response = await db.prepare(`
-      SELECT ordinal, endpoint_id, test_design_id, test_design_version_id,
-             test_design_version, scenario_count, scenario_ids_json
-      FROM test_suite_version_items
-      WHERE organization_id = ? AND project_id = ? AND suite_version_id = ?
-      ORDER BY ordinal ASC
+      SELECT i.ordinal, i.endpoint_id, i.test_design_id, i.test_design_version_id,
+             i.test_design_version, i.scenario_count, i.scenario_ids_json,
+             p.target_method, p.target_path
+      FROM test_suite_version_items i
+      LEFT JOIN test_design_execution_inventory p
+        ON p.test_design_version_id = i.test_design_version_id
+      WHERE i.organization_id = ? AND i.project_id = ? AND i.suite_version_id = ?
+      ORDER BY i.ordinal ASC
       LIMIT ? OFFSET ?
     `).bind(organizationId, projectId, suiteVersionId, safeLimit, safeOffset).all();
     const items = (response?.results || []).map((row) => ({
       ordinal: Number(row.ordinal), endpointId: row.endpoint_id, testDesignId: row.test_design_id,
       testDesignVersionId: row.test_design_version_id, testDesignVersion: Number(row.test_design_version),
+      method: row.target_method || null, path: row.target_path || null,
       scenarioCount: Number(row.scenario_count), scenarioIds: parseJson(row.scenario_ids_json, {
         details: { field: "scenario_ids_json", suiteVersionId, ordinal: Number(row.ordinal) }, fallback: [],
       }),
@@ -560,9 +572,9 @@ export function createSuiteRepository(db, {
 
   async function materializeAutoReadySuite({ organizationId, projectId }) {
     const inventory = await buildProjectInventory({ organizationId, projectId });
-    if (!inventory.executable) {
-      throw new TestRegistryError("Project has no execution-eligible READY scenarios to materialize.", {
-        code: "TEST_SUITE_NO_EXECUTION_ELIGIBLE_SCENARIOS",
+    if (!inventory.readyAvailable) {
+      throw new TestRegistryError("Project has no semantic READY scenarios to materialize.", {
+        code: "TEST_SUITE_NO_READY_SCENARIOS",
         status: 409,
         retryable: false,
         details: {
@@ -587,7 +599,7 @@ export function createSuiteRepository(db, {
       projectId,
       AUTO_SUITE_TYPE,
       "Regressão automática",
-      "Snapshot zero-config de cenários READY elegíveis pela política de execução segura do QAgent.",
+      "Snapshot zero-config de todos os cenários semanticamente READY dos Test Designs mais recentes do projeto.",
       stamp,
       stamp,
     ).run();
@@ -640,8 +652,8 @@ export function createSuiteRepository(db, {
         AUTO_SUITE_SELECTION_POLICY_VERSION,
         inventory.inventoryFingerprint,
         inventory.testDesignCount,
-        inventory.endpointWithExecutionEligibleCount,
-        inventory.executionEligibleScenarioCount,
+        inventory.endpointWithReadyCount,
+        inventory.readyScenarioCount,
         JSON.stringify(inventory.selection),
         createdAt,
       );

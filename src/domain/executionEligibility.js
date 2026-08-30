@@ -1,8 +1,8 @@
 import { TestRegistryError } from "./errors.js";
 
 export const SUITE_EXECUTION_ELIGIBILITY_POLICY_VERSION = "qagent.suite-execution-eligibility.v1";
-export const SUITE_SELECTION_POLICY_VERSION = "qagent.suite-selection-policy.v1.1";
-export const SUITE_SELECTION_POLICY = "LATEST_TEST_DESIGNS_EXECUTION_ELIGIBLE_SCENARIOS";
+export const SUITE_SELECTION_POLICY_VERSION = "qagent.suite-selection-policy.v2";
+export const SUITE_SELECTION_POLICY = "LATEST_TEST_DESIGNS_READY_SCENARIOS";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const SIDE_EFFECT_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

@@ -91,21 +91,21 @@ test("READY is not equal to execution-eligible: safe methods enter the Suite and
     assert.equal(inventory.policyBlockedReadyScenarioCount, 3);
     assert.equal(inventory.endpointWithReadyCount, 1);
     assert.equal(inventory.endpointWithExecutionEligibleCount, 1);
-    assert.deepEqual(inventory.selection[0].scenarioIds, ["test_001", "test_003"]);
+    assert.deepEqual(inventory.selection[0].scenarioIds, ["test_001", "test_002", "test_003", "test_004", "test_005"]);
     assert.deepEqual(inventory.items[0].policyBlockedReasonCounts, {
       MUTATION_EXECUTION_DISABLED: 2,
       HTTP_METHOD_UNSUPPORTED: 1,
     });
     assert.equal(inventory.eligibilityPolicyVersion, "qagent.suite-execution-eligibility.v1");
-    assert.equal(inventory.selectionPolicyVersion, "qagent.suite-selection-policy.v1.1");
+    assert.equal(inventory.selectionPolicyVersion, "qagent.suite-selection-policy.v2");
 
     const suiteResponse = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_test/suites/auto-ready/materialize", { method: "POST", headers: headers() }), env(db));
     assert.equal(suiteResponse.status, 201);
     const suite = (await suiteResponse.json()).data;
-    assert.equal(suite.version.scenarioCount, 2);
-    assert.equal(suite.version.selectionPolicy, "LATEST_TEST_DESIGNS_EXECUTION_ELIGIBLE_SCENARIOS");
-    assert.equal(suite.version.selectionPolicyVersion, "qagent.suite-selection-policy.v1.1");
-    assert.deepEqual(suite.version.selection[0].scenarioIds, ["test_001", "test_003"]);
+    assert.equal(suite.version.scenarioCount, 5);
+    assert.equal(suite.version.selectionPolicy, "LATEST_TEST_DESIGNS_READY_SCENARIOS");
+    assert.equal(suite.version.selectionPolicyVersion, "qagent.suite-selection-policy.v2");
+    assert.deepEqual(suite.version.selection[0].scenarioIds, ["test_001", "test_002", "test_003", "test_004", "test_005"]);
   } finally { db.close(); }
 });
 
@@ -121,11 +121,13 @@ test("a project with only READY mutations fails closed instead of creating a pre
     assert.equal(inventory.readyScenarioCount, 4);
     assert.equal(inventory.executionEligibleScenarioCount, 0);
     assert.equal(inventory.policyBlockedReadyScenarioCount, 4);
-    assert.equal(inventory.executable, false);
+    assert.equal(inventory.executable, true);
 
     const materialize = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_test/suites/auto-ready/materialize", { method: "POST", headers: headers() }), env(db));
-    assert.equal(materialize.status, 409);
-    assert.equal((await materialize.json()).code, "TEST_SUITE_NO_EXECUTION_ELIGIBLE_SCENARIOS");
+    assert.equal(materialize.status, 201);
+    const materialized = (await materialize.json()).data;
+    assert.equal(materialized.version.scenarioCount, 4);
+    assert.equal(materialized.version.selectionPolicyVersion, "qagent.suite-selection-policy.v2");
   } finally { db.close(); }
 });
 
@@ -266,8 +268,8 @@ test("an existing 07.7.10-A Suite v1 becomes OUTDATED and materializes v2 under 
     assert.equal(response.status, 201);
     const result = (await response.json()).data;
     assert.equal(result.version.version, 2);
-    assert.equal(result.version.scenarioCount, 1);
-    assert.equal(result.version.selectionPolicyVersion, "qagent.suite-selection-policy.v1.1");
-    assert.deepEqual(result.version.selection[0].scenarioIds, ["test_001"]);
+    assert.equal(result.version.scenarioCount, 2);
+    assert.equal(result.version.selectionPolicyVersion, "qagent.suite-selection-policy.v2");
+    assert.deepEqual(result.version.selection[0].scenarioIds, ["test_001", "test_002"]);
   } finally { db.close(); }
 });

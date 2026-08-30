@@ -175,7 +175,7 @@ test("Auto suite materialization fails closed when the project has no READY scen
     await append(db, payload);
     const response = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_test/suites/auto-ready/materialize", { method: "POST", headers: headers() }), env(db));
     assert.equal(response.status, 409);
-    assert.equal((await response.json()).code, "TEST_SUITE_NO_EXECUTION_ELIGIBLE_SCENARIOS");
+    assert.equal((await response.json()).code, "TEST_SUITE_NO_READY_SCENARIOS");
 
     const wrong = await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_other/test-inventory", { headers: headers("org_test", "prj_test") }), env(db));
     assert.equal(wrong.status, 403);
