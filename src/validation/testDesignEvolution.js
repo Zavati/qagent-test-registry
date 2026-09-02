@@ -1,7 +1,7 @@
 import { TestRegistryError } from "../domain/errors.js";
 import { registryLimits, validateInternalTenantHeaders } from "./testDesignVersion.js";
 
-const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION"]);
+const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION"]);
 
 function fail(message, path, code = "TEST_REGISTRY_EVOLUTION_INVALID", status = 400) {
   throw new TestRegistryError(message, { code, status, path });
@@ -37,12 +37,13 @@ export function validateDerivedVersionInput(input, env={}) {
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
-    known(c,new Set(["type","scenarioId","assertionIndex","expectedStatusCodes","expectedContentTypes"]),path);
+    known(c,new Set(["type","scenarioId","assertionIndex","expectedStatusCodes","expectedContentTypes","schemaRef"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180); const assertionIndex=positiveInt(c.assertionIndex,`${path}.assertionIndex`);
     const key=`${scenarioId}:${assertionIndex}`; if(seen.has(key)) fail("Duplicate assertion change.",path); seen.add(key);
     if(type==="STATUS_EXPECTATION") return {type,scenarioId,assertionIndex,expectedStatusCodes:statusCodes(c.expectedStatusCodes,`${path}.expectedStatusCodes`)};
-    return {type,scenarioId,assertionIndex,expectedContentTypes:contentTypes(c.expectedContentTypes,`${path}.expectedContentTypes`)};
+    if(type==="CONTENT_TYPE_EXPECTATION") return {type,scenarioId,assertionIndex,expectedContentTypes:contentTypes(c.expectedContentTypes,`${path}.expectedContentTypes`)};
+    return {type,scenarioId,assertionIndex,schemaRef:text(c.schemaRef,`${path}.schemaRef`,240)};
   });
   const serialized=JSON.stringify(payload); const bytes=new TextEncoder().encode(serialized).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes) fail("Request body exceeds persistence limit.","payload","TEST_REGISTRY_REQUEST_TOO_LARGE",413);

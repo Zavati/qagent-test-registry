@@ -210,6 +210,16 @@ export function createTestDesignRepository(db, {
       } else if (change.type === "CONTENT_TYPE_EXPECTATION") {
         if (assertion.type !== "CONTENT_TYPE") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
         assertion.expected = [...change.expectedContentTypes];
+      } else if (change.type === "SCHEMA_EXPECTATION") {
+        if (assertion.type !== "SCHEMA") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
+        const previousSchemaRef = assertion.schemaRef;
+        assertion.schemaRef = change.schemaRef;
+        if (scenario.grounding && Array.isArray(scenario.grounding.schemaRefs)) {
+          const stillReferenced = (assertions || []).some((item) => item?.type === "SCHEMA" && item !== assertion && item?.schemaRef === previousSchemaRef);
+          const nextRefs = scenario.grounding.schemaRefs.filter((ref) => ref !== change.schemaRef && (stillReferenced || ref !== previousSchemaRef));
+          nextRefs.push(change.schemaRef);
+          scenario.grounding.schemaRefs = [...new Set(nextRefs)];
+        }
       }
     }
 

@@ -6,3 +6,25 @@ test('07.8-A creates one immutable derived version and replays proposal idempote
 const payload={organizationId:'org_test',projectId:'prj_test',sourceTestDesignVersionId:first.versionId,derivation:{type:'RESULT_EVOLUTION',proposalId:'tep_1234567890abcdef',sourceResultSetId:'rset_1',sourceScenarioResultId:'sres_1',approvedByUserId:'usr_1',approvalReason:'Validated product behavior'},changes:[{type:'STATUS_EXPECTATION',scenarioId:'test_001',assertionIndex:0,expectedStatusCodes:[422]}]};const req=()=>new Request('https://r/internal/v1/test-registry/test-designs/derived-versions',{method:'POST',headers,body:JSON.stringify(payload)});const evolved=await handleRequest(req(),env(db));assert.equal(evolved.status,201);const e=(await evolved.json()).data.testDesign;assert.equal(e.version,2);const replay=await handleRequest(req(),env(db));assert.equal(replay.status,200);assert.equal((await replay.json()).data.testDesign.versionId,e.versionId);
 const old=await handleRequest(new Request(`https://r/v1/test-registry/test-designs/${first.id}/versions/1`,{headers}),env(db));const latest=await handleRequest(new Request('https://r/v1/test-registry/projects/prj_test/endpoints/cep_orders/test-design/latest',{headers}),env(db));assert.deepEqual((await old.json()).data.version.specification.scenarios[0].spec.assertions[0].expectedStatusCodes,[200]);assert.deepEqual((await latest.json()).data.version.specification.scenarios[0].spec.assertions[0].expectedStatusCodes,[422]);assert.equal(db.raw.prepare('SELECT COUNT(*) c FROM test_design_versions').get().c,2);
 }finally{db.close();}});
+
+test('07.8-A6 evolves a SCHEMA assertion to a Catalog version ref without mutating v1',async()=>{
+  const db=new SQLiteD1();db.exec(m1);db.exec(m3);db.exec(m5);
+  try{
+    const base=appendPayload({generationRequestId:'tdg_evolution_schema_0001'});
+    base.specification.scenarios[0].grounding.schemaRefs=['csv_response_old'];
+    base.specification.scenarios[0].spec.assertions=[{type:'STATUS',expectedStatusCodes:[200]},{type:'SCHEMA',schemaRef:'csv_response_old'}];
+    const created=await handleRequest(new Request('https://r/v1/test-registry/test-designs/versions',{method:'POST',headers,body:JSON.stringify(base)}),env(db));
+    assert.equal(created.status,201);const first=(await created.json()).data.testDesign;
+    const payload={organizationId:'org_test',projectId:'prj_test',sourceTestDesignVersionId:first.versionId,derivation:{type:'RESULT_EVOLUTION',proposalId:'tep_schema_1234567890',sourceResultSetId:'rset_schema_1',sourceScenarioResultId:'sres_schema_1',approvedByUserId:'usr_1',approvalReason:'Schema behavior validated'},changes:[{type:'SCHEMA_EXPECTATION',scenarioId:'test_001',assertionIndex:1,schemaRef:'csv_response_new'}]};
+    const evolved=await handleRequest(new Request('https://r/internal/v1/test-registry/test-designs/derived-versions',{method:'POST',headers,body:JSON.stringify(payload)}),env(db));
+    assert.equal(evolved.status,201);
+    const old=await handleRequest(new Request(`https://r/v1/test-registry/test-designs/${first.id}/versions/1`,{headers}),env(db));
+    const latest=await handleRequest(new Request('https://r/v1/test-registry/projects/prj_test/endpoints/cep_orders/test-design/latest',{headers}),env(db));
+    const oldScenario=(await old.json()).data.version.specification.scenarios[0];
+    const latestScenario=(await latest.json()).data.version.specification.scenarios[0];
+    assert.equal(oldScenario.spec.assertions[1].schemaRef,'csv_response_old');
+    assert.deepEqual(oldScenario.grounding.schemaRefs,['csv_response_old']);
+    assert.equal(latestScenario.spec.assertions[1].schemaRef,'csv_response_new');
+    assert.deepEqual(latestScenario.grounding.schemaRefs,['csv_response_new']);
+  }finally{db.close();}
+});
