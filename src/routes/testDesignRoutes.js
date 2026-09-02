@@ -6,6 +6,7 @@ import {
   validateAppendVersionInput,
   validateInternalTenantHeaders,
 } from "../validation/testDesignVersion.js";
+import { validateDerivedVersionInput } from "../validation/testDesignEvolution.js";
 
 export async function readJsonBody(request, env = {}) {
   const { maxRequestBytes } = registryLimits(env);
@@ -166,5 +167,25 @@ export async function runnerArtifactRoute(request, env, { testDesignVersionId })
         },
       },
     },
+  };
+}
+
+
+export async function derivedVersionRoute(request, env) {
+  const body = await readJsonBody(request, env);
+  const input = validateDerivedVersionInput(body, env);
+  validateInternalTenantHeaders(request, input);
+  const repository = createTestDesignRepository(env.TEST_REGISTRY_DB);
+  const result = await repository.appendDerivedVersion(input);
+  return {
+    status: result.created ? 201 : 200,
+    body: { status: "ok", data: {
+      created: result.created, idempotentReplay: result.idempotentReplay,
+      testDesign: {
+        id: result.version.testDesignId, versionId: result.version.id, version: result.version.version,
+        organizationId: result.version.organizationId, projectId: result.version.projectId, endpointId: result.version.endpointId,
+        contextFingerprint: result.version.contextFingerprint, versionOrigin: result.version.versionOrigin, createdAt: result.version.createdAt,
+      },
+    } },
   };
 }

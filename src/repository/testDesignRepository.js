@@ -166,6 +166,98 @@ export function createTestDesignRepository(db, {
     return mapVersion(row);
   }
 
+
+  async function getVersionByDerivationKey(derivationKey) {
+    const row = await first(
+      db,
+      `SELECT ${VERSION_COLUMNS} FROM test_design_versions WHERE derivation_key = ? LIMIT 1`,
+      [derivationKey],
+    );
+    return mapVersion(row);
+  }
+
+  async function appendDerivedVersion(input) {
+    const derivationKey = `RESULT_EVOLUTION:${input.derivation.proposalId}`;
+    const replay = await getVersionByDerivationKey(derivationKey);
+    if (replay) return { created: false, idempotentReplay: true, version: replay };
+
+    const source = await getVersionById({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      testDesignVersionId: input.sourceTestDesignVersionId,
+    });
+    if (!source) {
+      throw new TestRegistryError("Source Test Design version not found.", { code: "TEST_DESIGN_VERSION_NOT_FOUND", status: 404 });
+    }
+    const root = await getRootByScope(source);
+    if (!root || root.latestVersionId !== source.id) {
+      throw new TestRegistryError("Source Test Design version is stale.", {
+        code: "TEST_REGISTRY_EVOLUTION_SOURCE_STALE", status: 409, retryable: false,
+        details: { sourceVersionId: source.id, latestVersionId: root?.latestVersionId || null },
+      });
+    }
+
+    const specification = structuredClone(source.specification);
+    for (const change of input.changes) {
+      const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
+      if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
+      const assertions = scenario?.spec?.assertions;
+      const assertion = Array.isArray(assertions) ? assertions[change.assertionIndex] : null;
+      if (!assertion) throw new TestRegistryError("Evolution assertion not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
+      if (change.type === "STATUS_EXPECTATION") {
+        if (assertion.type !== "STATUS") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
+        assertion.expectedStatusCodes = [...change.expectedStatusCodes];
+      } else if (change.type === "CONTENT_TYPE_EXPECTATION") {
+        if (assertion.type !== "CONTENT_TYPE") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
+        assertion.expected = [...change.expectedContentTypes];
+      }
+    }
+
+    const nextVersion = root.latestVersion + 1;
+    const versionId = versionIdFactory();
+    const createdAt = now().toISOString();
+    const origin = {
+      type: "RESULT_EVOLUTION", proposalId: input.derivation.proposalId,
+      sourceResultSetId: input.derivation.sourceResultSetId, sourceScenarioResultId: input.derivation.sourceScenarioResultId,
+      sourceTestDesignVersionId: source.id, approvedByUserId: input.derivation.approvedByUserId || null,
+      approvalReason: input.derivation.approvalReason || null,
+    };
+    const specificationJson = JSON.stringify(specification);
+    const insert = db.prepare(
+      `INSERT INTO test_design_versions (
+         id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
+         contract_version, specification_version, provider, model, prompt_version, repair_prompt_version, guard_version,
+         scenario_count, ready_count, review_required_count, specification_json, generation_metadata_json, safe_diagnostics_json,
+         derivation_key, version_origin_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      versionId, source.testDesignId, source.organizationId, source.projectId, source.endpointId, nextVersion,
+      `evolution_${input.derivation.proposalId}`, source.contextFingerprint, source.contractVersion, source.specificationVersion,
+      source.provider, source.model, source.promptVersion, source.repairPromptVersion, source.guardVersion,
+      source.scenarioCount, source.readyCount, source.reviewRequiredCount, specificationJson,
+      JSON.stringify(source.generationMetadata), JSON.stringify(source.safeDiagnostics), derivationKey, JSON.stringify(origin), createdAt,
+    );
+    const projection = buildTestDesignExecutionProjection({
+      specificationJson, testDesignVersionId: versionId, testDesignId: source.testDesignId, organizationId: source.organizationId,
+      projectId: source.projectId, endpointId: source.endpointId, testDesignVersion: nextVersion, createdAt,
+    });
+    const updateRoot = db.prepare(
+      `UPDATE test_designs SET latest_version = ?, latest_version_id = ?, updated_at = ? WHERE id = ? AND latest_version_id = ?`
+    ).bind(nextVersion, versionId, createdAt, source.testDesignId, source.id);
+    try {
+      await db.batch([insert, projectionInsertStatement(db, projection), updateRoot]);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const again = await getVersionByDerivationKey(derivationKey);
+        if (again) return { created: false, idempotentReplay: true, version: again };
+      }
+      throw error;
+    }
+    const created = await getVersionById({ organizationId: source.organizationId, projectId: source.projectId, testDesignVersionId: versionId });
+    if (!created) throw new TestRegistryError("Derived Test Design version could not be verified.", { code: "TEST_REGISTRY_EVOLUTION_VERIFY_FAILED", status: 500, retryable: true });
+    return { created: true, idempotentReplay: false, version: created };
+  }
+
   async function appendVersion(input) {
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
@@ -351,6 +443,8 @@ export function createTestDesignRepository(db, {
     getVersionById,
     getRootByScope,
     getVersionByGenerationRequestId,
+    getVersionByDerivationKey,
+    appendDerivedVersion,
   };
 }
 

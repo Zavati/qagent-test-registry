@@ -1,6 +1,7 @@
 import { asTestRegistryError } from "./domain/errors.js";
 import {
   appendVersionRoute,
+  derivedVersionRoute,
   exactVersionRoute,
   latestVersionRoute,
   runnerArtifactRoute,
@@ -134,6 +135,12 @@ export async function handleRequest(request, env = {}) {
     if (url.pathname === "/v1/test-registry/test-designs/versions") {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       const result = await appendVersionRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
+
+    if (url.pathname === "/internal/v1/test-registry/test-designs/derived-versions") {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      const result = await derivedVersionRoute(request, env);
       return json(result.body, { status: result.status });
     }
 
