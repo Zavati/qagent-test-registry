@@ -50,3 +50,32 @@ test('08.1 learning evolution appends a JSON_PATH_EQUALS assertion without mutat
     assert.equal(latestScenario.automation.evolutionState,'STABLE');
   }finally{db.close();}
 });
+
+test('08.1.1 request-aware evolution repairs GENERATED Test Data in vN+1 without mutating source',async()=>{
+  const db=new SQLiteD1();db.exec(m1);db.exec(m3);db.exec(m5);
+  try{
+    const base=appendPayload({generationRequestId:'tdg_request_aware_0001'});
+    base.specification.scenarios[0].spec.testData={
+      contractVersion:'qagent.test-data-bindings.v1',
+      bindings:[
+        {target:'QUERY',selector:'limit',source:'GENERATED',valueType:'STRING',generator:{kind:'TEXT',config:{}}},
+        {target:'QUERY',selector:'offset',source:'GENERATED',valueType:'STRING',generator:{kind:'TEXT',config:{}}},
+      ],
+    };
+    const created=await handleRequest(new Request('https://r/v1/test-registry/test-designs/versions',{method:'POST',headers,body:JSON.stringify(base)}),env(db));
+    assert.equal(created.status,201);const first=(await created.json()).data.testDesign;
+    const payload={organizationId:'org_test',projectId:'prj_test',sourceTestDesignVersionId:first.versionId,derivation:{type:'RESULT_EVOLUTION',proposalId:'tep_request_aware_123456',sourceResultSetId:'rset_request_aware_1',sourceScenarioResultId:'sres_request_aware_1',approvedByUserId:null,approvalReason:'QAgent AUTO_SAFE repaired invalid generated query data'},changes:[
+      {type:'TEST_DATA_BINDING',scenarioId:'test_001',bindingIndex:0,target:'QUERY',selector:'limit',source:'GENERATED',valueType:'INTEGER',generatorKind:'INTEGER',generatorConfig:{schema:{type:'integer',minimum:10,maximum:50}}},
+      {type:'TEST_DATA_BINDING',scenarioId:'test_001',bindingIndex:1,target:'QUERY',selector:'offset',source:'GENERATED',valueType:'INTEGER',generatorKind:'INTEGER'},
+    ]};
+    const evolved=await handleRequest(new Request('https://r/internal/v1/test-registry/test-designs/derived-versions',{method:'POST',headers,body:JSON.stringify(payload)}),env(db));
+    assert.equal(evolved.status,201);
+    const old=await handleRequest(new Request(`https://r/v1/test-registry/test-designs/${first.id}/versions/1`,{headers}),env(db));
+    const latest=await handleRequest(new Request('https://r/v1/test-registry/projects/prj_test/endpoints/cep_orders/test-design/latest',{headers}),env(db));
+    const oldBindings=(await old.json()).data.version.specification.scenarios[0].spec.testData.bindings;
+    const nextBindings=(await latest.json()).data.version.specification.scenarios[0].spec.testData.bindings;
+    assert.equal(oldBindings[0].valueType,'STRING');assert.equal(oldBindings[0].generator.kind,'TEXT');
+    assert.equal(nextBindings[0].valueType,'INTEGER');assert.equal(nextBindings[0].generator.kind,'INTEGER');assert.deepEqual(nextBindings[0].generator.config,{schema:{type:'integer',minimum:10,maximum:50}});
+    assert.equal(nextBindings[1].valueType,'INTEGER');assert.equal(nextBindings[1].generator.kind,'INTEGER');
+  }finally{db.close();}
+});

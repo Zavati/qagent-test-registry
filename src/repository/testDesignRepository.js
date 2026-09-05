@@ -201,6 +201,22 @@ export function createTestDesignRepository(db, {
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
+      if (change.type === "TEST_DATA_BINDING") {
+        const bindings = scenario?.spec?.testData?.bindings;
+        if (!Array.isArray(bindings)) throw new TestRegistryError("Evolution Test Data bindings are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
+        const binding = bindings[change.bindingIndex] || null;
+        if (!binding) throw new TestRegistryError("Evolution Test Data binding not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
+        if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== "GENERATED" || change.source !== "GENERATED") {
+          throw new TestRegistryError("Evolution Test Data binding identity/source mismatch.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_MISMATCH", status: 409 });
+        }
+        binding.valueType = change.valueType;
+        binding.generator = {
+          ...(binding.generator || {}),
+          kind: change.generatorKind,
+          config: structuredClone(change.generatorConfig || {}),
+        };
+        continue;
+      }
       const assertions = scenario?.spec?.assertions;
       if (!Array.isArray(assertions)) throw new TestRegistryError("Evolution assertions are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
       const assertion = assertions[change.assertionIndex] || null;
