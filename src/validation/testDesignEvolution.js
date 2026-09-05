@@ -1,7 +1,7 @@
 import { TestRegistryError } from "../domain/errors.js";
 import { registryLimits, validateInternalTenantHeaders } from "./testDesignVersion.js";
 
-const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION"]);
+const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION"]);
 
 function fail(message, path, code = "TEST_REGISTRY_EVOLUTION_INVALID", status = 400) {
   throw new TestRegistryError(message, { code, status, path });
@@ -37,13 +37,19 @@ export function validateDerivedVersionInput(input, env={}) {
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
-    known(c,new Set(["type","scenarioId","assertionIndex","expectedStatusCodes","expectedContentTypes","schemaRef"]),path);
+    known(c,new Set(["type","scenarioId","assertionIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180); const assertionIndex=positiveInt(c.assertionIndex,`${path}.assertionIndex`);
     const key=`${scenarioId}:${assertionIndex}`; if(seen.has(key)) fail("Duplicate assertion change.",path); seen.add(key);
     if(type==="STATUS_EXPECTATION") return {type,scenarioId,assertionIndex,expectedStatusCodes:statusCodes(c.expectedStatusCodes,`${path}.expectedStatusCodes`)};
     if(type==="CONTENT_TYPE_EXPECTATION") return {type,scenarioId,assertionIndex,expectedContentTypes:contentTypes(c.expectedContentTypes,`${path}.expectedContentTypes`)};
-    return {type,scenarioId,assertionIndex,schemaRef:text(c.schemaRef,`${path}.schemaRef`,240)};
+    if(type==="SCHEMA_EXPECTATION") return {type,scenarioId,assertionIndex,schemaRef:text(c.schemaRef,`${path}.schemaRef`,240)};
+    const jsonPath=text(c.path,`${path}.path`,500);
+    if(!/^\$\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)?$/.test(jsonPath)) fail("Only simple non-sensitive JSON paths are supported for learning.",`${path}.path`);
+    if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(jsonPath)) fail("Sensitive JSON path is forbidden.",`${path}.path`,`TEST_REGISTRY_EVOLUTION_FORBIDDEN_FIELD`);
+    if(c.expected!==null&&!['string','number','boolean'].includes(typeof c.expected)) fail("Learned JSON expectation must be scalar.",`${path}.expected`);
+    if(typeof c.expected==='string'&&c.expected.length>240) fail("Learned JSON expectation is too long.",`${path}.expected`);
+    return {type,scenarioId,assertionIndex,path:jsonPath,expected:c.expected};
   });
   const serialized=JSON.stringify(payload); const bytes=new TextEncoder().encode(serialized).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes) fail("Request body exceeds persistence limit.","payload","TEST_REGISTRY_REQUEST_TOO_LARGE",413);

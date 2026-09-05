@@ -28,3 +28,25 @@ test('07.8-A6 evolves a SCHEMA assertion to a Catalog version ref without mutati
     assert.deepEqual(latestScenario.grounding.schemaRefs,['csv_response_new']);
   }finally{db.close();}
 });
+
+test('08.1 learning evolution appends a JSON_PATH_EQUALS assertion without mutating the source version',async()=>{
+  const db=new SQLiteD1();db.exec(m1);db.exec(m3);db.exec(m5);
+  try{
+    const base=appendPayload({generationRequestId:'tdg_evolution_learning_0001'});
+    base.specification.scenarios[0].automation.evolutionState='LEARNING';
+    base.specification.scenarios[0].spec.assertions=[{type:'STATUS',expectedStatusCodes:[400]}];
+    const created=await handleRequest(new Request('https://r/v1/test-registry/test-designs/versions',{method:'POST',headers,body:JSON.stringify(base)}),env(db));
+    assert.equal(created.status,201);const first=(await created.json()).data.testDesign;
+    const payload={organizationId:'org_test',projectId:'prj_test',sourceTestDesignVersionId:first.versionId,derivation:{type:'RESULT_EVOLUTION',proposalId:'tep_learning_1234567890',sourceResultSetId:'rset_learning_1',sourceScenarioResultId:'sres_learning_1',approvedByUserId:null,approvalReason:'QAgent AUTO_SAFE learned stable validation message'},changes:[{type:'ADD_JSON_PATH_EQUALS_ASSERTION',scenarioId:'test_001',assertionIndex:1,path:'$.message',expected:'email is required'}]};
+    const evolved=await handleRequest(new Request('https://r/internal/v1/test-registry/test-designs/derived-versions',{method:'POST',headers,body:JSON.stringify(payload)}),env(db));
+    assert.equal(evolved.status,201);
+    const old=await handleRequest(new Request(`https://r/v1/test-registry/test-designs/${first.id}/versions/1`,{headers}),env(db));
+    const latest=await handleRequest(new Request('https://r/v1/test-registry/projects/prj_test/endpoints/cep_orders/test-design/latest',{headers}),env(db));
+    const oldScenario=(await old.json()).data.version.specification.scenarios[0];
+    const latestScenario=(await latest.json()).data.version.specification.scenarios[0];
+    assert.deepEqual(oldScenario.spec.assertions,[{type:'STATUS',expectedStatusCodes:[400]}]);
+    assert.equal(oldScenario.automation.evolutionState,'LEARNING');
+    assert.deepEqual(latestScenario.spec.assertions,[{type:'STATUS',expectedStatusCodes:[400]},{type:'JSON_PATH_EQUALS',path:'$.message',expected:'email is required'}]);
+    assert.equal(latestScenario.automation.evolutionState,'STABLE');
+  }finally{db.close();}
+});

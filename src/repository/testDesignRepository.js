@@ -202,14 +202,25 @@ export function createTestDesignRepository(db, {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
       const assertions = scenario?.spec?.assertions;
-      const assertion = Array.isArray(assertions) ? assertions[change.assertionIndex] : null;
-      if (!assertion) throw new TestRegistryError("Evolution assertion not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
+      if (!Array.isArray(assertions)) throw new TestRegistryError("Evolution assertions are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
+      const assertion = assertions[change.assertionIndex] || null;
+      if (change.type !== "ADD_JSON_PATH_EQUALS_ASSERTION" && !assertion) throw new TestRegistryError("Evolution assertion not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
       if (change.type === "STATUS_EXPECTATION") {
         if (assertion.type !== "STATUS") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
         assertion.expectedStatusCodes = [...change.expectedStatusCodes];
       } else if (change.type === "CONTENT_TYPE_EXPECTATION") {
         if (assertion.type !== "CONTENT_TYPE") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
         assertion.expected = [...change.expectedContentTypes];
+      } else if (change.type === "JSON_PATH_EQUALS_EXPECTATION") {
+        if (assertion.type !== "JSON_PATH_EQUALS" || assertion.path !== change.path) throw new TestRegistryError("Evolution assertion type/path mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
+        assertion.expected = structuredClone(change.expected);
+      } else if (change.type === "ADD_JSON_PATH_EQUALS_ASSERTION") {
+        if (change.assertionIndex !== assertions.length) throw new TestRegistryError("Learned assertion insertion index is stale.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_INDEX_STALE", status: 409 });
+        if (assertions.some((item) => item?.type === "JSON_PATH_EQUALS" && item?.path === change.path)) throw new TestRegistryError("Learned assertion already exists.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_EXISTS", status: 409 });
+        assertions.push({ type: "JSON_PATH_EQUALS", path: change.path, expected: structuredClone(change.expected) });
+        if (scenario.automation && scenario.automation.evolutionState === "LEARNING") {
+          scenario.automation.evolutionState = "STABLE";
+        }
       } else if (change.type === "SCHEMA_EXPECTATION") {
         if (assertion.type !== "SCHEMA") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
         const previousSchemaRef = assertion.schemaRef;
