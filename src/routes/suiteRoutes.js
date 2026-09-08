@@ -31,7 +31,9 @@ export async function latestAutoReadySuiteRoute(request, env, { projectId }) {
   const scope = validateInternalTenantHeaders(request, { projectId });
   const compact = compactRequested(request);
   const repository = createSuiteRepository(env.TEST_REGISTRY_DB);
-  const result = await repository.getLatestAutoSuite({
+  const includeSnapshot = new URL(request.url).searchParams.get("snapshot") === "1";
+  const read = includeSnapshot ? repository.getLatestAutoSuiteWithSnapshot : repository.getLatestAutoSuite;
+  const result = await read({
     organizationId: scope.organizationId,
     projectId,
     includeSelection: !compact,

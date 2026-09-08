@@ -19,6 +19,8 @@ import {
 const encoder = new TextEncoder();
 const PROJECTION_BACKFILL_BATCH_SIZE = 50;
 const SUITE_ITEM_BACKFILL_BATCH_SIZE = 50;
+const EVOLUTION_AWARE_SNAPSHOT_CONTRACT_VERSION = "qagent.evolution-aware-regression-snapshot.v1";
+const SNAPSHOT_CHANGE_LIMIT = 25;
 
 function bytesToHex(bytes) {
   return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
@@ -152,6 +154,35 @@ function projectionAsDbRow(projection) {
 
 function isUniqueConstraintError(error) {
   return /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|SQLITE_CONSTRAINT_PRIMARYKEY/i.test(String(error?.message || error || ""));
+}
+
+function parseVersionOrigin(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function emptySnapshot({ state, suiteInventoryFingerprint = null, currentInventoryFingerprint = null, reason = null } = {}) {
+  return {
+    contractVersion: EVOLUTION_AWARE_SNAPSHOT_CONTRACT_VERSION,
+    state,
+    outdatedReason: reason,
+    suiteInventoryFingerprint,
+    currentInventoryFingerprint,
+    changedTestDesignCount: 0,
+    evolvedTestDesignCount: 0,
+    versionChangedTestDesignCount: 0,
+    addedTestDesignCount: 0,
+    removedTestDesignCount: 0,
+    noLongerReadyTestDesignCount: 0,
+    changesIncluded: true,
+    changesTruncated: false,
+    changes: [],
+  };
 }
 
 function aggregateReasonCounts(target, source) {
@@ -463,6 +494,160 @@ export function createSuiteRepository(db, {
   }
 
 
+  async function getLatestAutoSuiteWithSnapshot({ organizationId, projectId, includeSelection = true, changeLimit = SNAPSHOT_CHANGE_LIMIT }) {
+    const latest = await getLatestAutoSuite({ organizationId, projectId, includeSelection });
+    if (!latest.exists || !latest.version) {
+      return {
+        ...latest,
+        snapshot: emptySnapshot({ state: "NOT_MATERIALIZED" }),
+      };
+    }
+
+    const inventory = await buildProjectInventory({ organizationId, projectId, compact: true });
+    const suiteVersion = latest.version;
+    const policyChanged = suiteVersion.selectionPolicyVersion !== inventory.selectionPolicyVersion;
+    if (!policyChanged && suiteVersion.inventoryFingerprint === inventory.inventoryFingerprint) {
+      return {
+        ...latest,
+        snapshot: emptySnapshot({
+          state: "CURRENT",
+          suiteInventoryFingerprint: suiteVersion.inventoryFingerprint,
+          currentInventoryFingerprint: inventory.inventoryFingerprint,
+        }),
+      };
+    }
+
+    await ensureSuiteVersionItems({ organizationId, projectId, version: suiteVersion });
+    const response = await db.prepare(`
+      SELECT
+        i.ordinal,
+        i.endpoint_id AS suite_endpoint_id,
+        i.test_design_id AS suite_test_design_id,
+        i.test_design_version_id AS suite_test_design_version_id,
+        i.test_design_version AS suite_test_design_version,
+        i.scenario_count AS suite_scenario_count,
+        d.status AS current_test_design_status,
+        d.latest_version_id AS current_test_design_version_id,
+        d.latest_version AS current_test_design_version,
+        v.version_origin_json AS current_version_origin_json,
+        v.derivation_key AS current_derivation_key,
+        p.ready_scenario_count AS current_ready_scenario_count
+      FROM test_suite_version_items i
+      LEFT JOIN test_designs d
+        ON d.id = i.test_design_id
+       AND d.organization_id = i.organization_id
+       AND d.project_id = i.project_id
+      LEFT JOIN test_design_versions v
+        ON v.id = d.latest_version_id
+      LEFT JOIN test_design_execution_inventory p
+        ON p.test_design_version_id = d.latest_version_id
+      WHERE i.organization_id = ? AND i.project_id = ? AND i.suite_version_id = ?
+      ORDER BY i.ordinal ASC
+    `).bind(organizationId, projectId, suiteVersion.suiteVersionId).all();
+
+    const rows = response?.results || [];
+    const currentItemsByDesignId = new Map(inventory.items.map((item) => [item.testDesignId, item]));
+    const suiteDesignIds = new Set();
+    const changes = [];
+    let evolvedTestDesignCount = 0;
+    let versionChangedTestDesignCount = 0;
+    let addedTestDesignCount = 0;
+    let removedTestDesignCount = 0;
+    let noLongerReadyTestDesignCount = 0;
+
+    const pushChange = (change) => {
+      if (changes.length < Math.max(1, Math.min(Number(changeLimit) || SNAPSHOT_CHANGE_LIMIT, 100))) changes.push(change);
+    };
+
+    for (const row of rows) {
+      suiteDesignIds.add(row.suite_test_design_id);
+      const current = currentItemsByDesignId.get(row.suite_test_design_id) || null;
+      if (!current || row.current_test_design_status !== "ACTIVE") {
+        removedTestDesignCount += 1;
+        pushChange({
+          changeType: "TEST_DESIGN_REMOVED",
+          endpointId: row.suite_endpoint_id,
+          testDesignId: row.suite_test_design_id,
+          from: { testDesignVersionId: row.suite_test_design_version_id, testDesignVersion: Number(row.suite_test_design_version) },
+          to: null,
+          evolution: null,
+        });
+        continue;
+      }
+      if (current.readyScenarioCount <= 0) {
+        noLongerReadyTestDesignCount += 1;
+        pushChange({
+          changeType: "TEST_DESIGN_NO_LONGER_READY",
+          endpointId: current.endpointId,
+          testDesignId: current.testDesignId,
+          from: { testDesignVersionId: row.suite_test_design_version_id, testDesignVersion: Number(row.suite_test_design_version) },
+          to: { testDesignVersionId: current.testDesignVersionId, testDesignVersion: current.testDesignVersion, readyScenarioCount: current.readyScenarioCount },
+          evolution: null,
+        });
+        continue;
+      }
+      if (row.suite_test_design_version_id !== current.testDesignVersionId) {
+        const origin = parseVersionOrigin(row.current_version_origin_json);
+        const evolved = origin?.type === "RESULT_EVOLUTION";
+        if (evolved) evolvedTestDesignCount += 1; else versionChangedTestDesignCount += 1;
+        pushChange({
+          changeType: evolved ? "TEST_DESIGN_EVOLVED" : "TEST_DESIGN_VERSION_CHANGED",
+          endpointId: current.endpointId,
+          testDesignId: current.testDesignId,
+          from: { testDesignVersionId: row.suite_test_design_version_id, testDesignVersion: Number(row.suite_test_design_version) },
+          to: { testDesignVersionId: current.testDesignVersionId, testDesignVersion: current.testDesignVersion, readyScenarioCount: current.readyScenarioCount },
+          evolution: evolved ? {
+            proposalId: typeof origin.proposalId === "string" ? origin.proposalId : null,
+            sourceTestDesignVersionId: typeof origin.sourceTestDesignVersionId === "string" ? origin.sourceTestDesignVersionId : null,
+          } : null,
+        });
+      }
+    }
+
+    for (const current of inventory.items) {
+      if (current.readyScenarioCount <= 0 || suiteDesignIds.has(current.testDesignId)) continue;
+      addedTestDesignCount += 1;
+      pushChange({
+        changeType: "TEST_DESIGN_ADDED",
+        endpointId: current.endpointId,
+        testDesignId: current.testDesignId,
+        from: null,
+        to: { testDesignVersionId: current.testDesignVersionId, testDesignVersion: current.testDesignVersion, readyScenarioCount: current.readyScenarioCount },
+        evolution: null,
+      });
+    }
+
+    const changedTestDesignCount = evolvedTestDesignCount + versionChangedTestDesignCount + addedTestDesignCount + removedTestDesignCount + noLongerReadyTestDesignCount;
+    const outdatedReason = evolvedTestDesignCount > 0
+      ? "TEST_DESIGN_EVOLVED"
+      : policyChanged
+        ? "SELECTION_POLICY_CHANGED"
+        : "PROJECT_TEST_INVENTORY_CHANGED";
+
+    return {
+      ...latest,
+      snapshot: {
+        contractVersion: EVOLUTION_AWARE_SNAPSHOT_CONTRACT_VERSION,
+        state: "OUTDATED",
+        outdatedReason,
+        suiteInventoryFingerprint: suiteVersion.inventoryFingerprint,
+        currentInventoryFingerprint: inventory.inventoryFingerprint,
+        changedTestDesignCount,
+        evolvedTestDesignCount,
+        versionChangedTestDesignCount,
+        addedTestDesignCount,
+        removedTestDesignCount,
+        noLongerReadyTestDesignCount,
+        selectionPolicyChanged: policyChanged,
+        suiteSelectionPolicyVersion: suiteVersion.selectionPolicyVersion,
+        currentSelectionPolicyVersion: inventory.selectionPolicyVersion,
+        changesIncluded: true,
+        changesTruncated: changes.length < changedTestDesignCount,
+        changes,
+      },
+    };
+  }
+
   async function ensureSuiteVersionItems({ organizationId, projectId, version }) {
     if (!version?.suiteVersionId) {
       throw new TestRegistryError("Suite version is required for execution item materialization.", {
@@ -722,6 +907,7 @@ export function createSuiteRepository(db, {
     buildProjectInventory,
     getAutoSuiteRoot,
     getLatestAutoSuite,
+    getLatestAutoSuiteWithSnapshot,
     getVersionById,
     getSuiteExecutionSlice,
     materializeAutoReadySuite,
