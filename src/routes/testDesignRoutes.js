@@ -7,6 +7,7 @@ import {
   validateInternalTenantHeaders,
 } from "../validation/testDesignVersion.js";
 import { validateDerivedVersionInput } from "../validation/testDesignEvolution.js";
+import { validateHumanRequestRepairInput } from "../validation/humanRequestRepair.js";
 
 export async function readJsonBody(request, env = {}) {
   const { maxRequestBytes } = registryLimits(env);
@@ -170,6 +171,27 @@ export async function runnerArtifactRoute(request, env, { testDesignVersionId })
   };
 }
 
+
+
+export async function humanRequestRepairRoute(request, env) {
+  const body = await readJsonBody(request, env);
+  const input = validateHumanRequestRepairInput(body, env);
+  validateInternalTenantHeaders(request, input);
+  const repository = createTestDesignRepository(env.TEST_REGISTRY_DB);
+  const result = await repository.appendHumanRequestRepairVersion(input);
+  return {
+    status: result.created ? 201 : 200,
+    body: { status: "ok", data: {
+      contractVersion: "qagent.human-request-repair-registry-result.v1",
+      created: result.created, idempotentReplay: result.idempotentReplay,
+      testDesign: {
+        id: result.version.testDesignId, versionId: result.version.id, version: result.version.version,
+        organizationId: result.version.organizationId, projectId: result.version.projectId, endpointId: result.version.endpointId,
+        createdAt: result.version.createdAt,
+      },
+    } },
+  };
+}
 
 export async function derivedVersionRoute(request, env) {
   const body = await readJsonBody(request, env);

@@ -347,6 +347,96 @@ export function createTestDesignRepository(db, {
     return { created: true, idempotentReplay: false, version: created };
   }
 
+
+  async function appendHumanRequestRepairVersion(input) {
+    const derivationKey = `HUMAN_REQUEST_REPAIR:${input.repair.repairId}`;
+    const replay = await getVersionByDerivationKey(derivationKey);
+    if (replay) return { created: false, idempotentReplay: true, version: replay };
+
+    const source = await getVersionById({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      testDesignVersionId: input.sourceTestDesignVersionId,
+    });
+    if (!source) throw new TestRegistryError('Source Test Design version not found.', { code: 'TEST_DESIGN_VERSION_NOT_FOUND', status: 404 });
+    const root = await getRootByScope(source);
+    if (!root || root.latestVersionId !== source.id) {
+      throw new TestRegistryError('Source Test Design version is stale.', {
+        code: 'TEST_REGISTRY_HUMAN_REPAIR_SOURCE_STALE', status: 409, retryable: false,
+        details: { sourceVersionId: source.id, latestVersionId: root?.latestVersionId || null },
+      });
+    }
+
+    const specification = structuredClone(source.specification);
+    for (const change of input.changes) {
+      const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
+      if (!scenario) throw new TestRegistryError('Human repair scenario not found in source version.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_SCENARIO_NOT_FOUND', status: 409 });
+      const bindings = scenario?.spec?.testData?.bindings;
+      if (!Array.isArray(bindings)) throw new TestRegistryError('Human repair Test Data bindings are unavailable.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_NOT_FOUND', status: 409 });
+      const binding = bindings[change.bindingIndex] || null;
+      if (!binding) throw new TestRegistryError('Human repair Test Data binding not found.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_NOT_FOUND', status: 409 });
+      if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== change.currentSource) {
+        throw new TestRegistryError('Human repair Test Data binding identity/source mismatch.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_MISMATCH', status: 409 });
+      }
+      if (binding.source === 'SECRET') throw new TestRegistryError('SECRET Test Data cannot be repaired with a literal.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_SECRET_FORBIDDEN', status: 409 });
+      binding.source = 'FIXED';
+      binding.valueType = change.valueType;
+      binding.bindingKey = binding.bindingKey || `${change.target}:${change.selector}`;
+      delete binding.generator;
+      binding.provenance = { origin: 'USER_DEFINED' };
+    }
+
+    const nextVersion = root.latestVersion + 1;
+    const versionId = versionIdFactory();
+    const createdAt = now().toISOString();
+    const origin = {
+      type: 'HUMAN_REQUEST_REPAIR',
+      repairId: input.repair.repairId,
+      sourceResultSetId: input.repair.sourceResultSetId,
+      sourceScenarioResultId: input.repair.sourceScenarioResultId,
+      sourceScenarioId: input.repair.sourceScenarioId,
+      sourceTestDesignVersionId: source.id,
+      approvedByUserId: input.repair.approvedByUserId,
+      reason: input.repair.reason,
+      repairedSelectors: input.changes.map((change) => change.selector),
+    };
+    const specificationJson = JSON.stringify(specification);
+    const insert = db.prepare(
+      `INSERT INTO test_design_versions (
+         id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
+         contract_version, specification_version, provider, model, prompt_version, repair_prompt_version, guard_version,
+         scenario_count, ready_count, review_required_count, specification_json, generation_metadata_json, safe_diagnostics_json,
+         derivation_key, version_origin_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      versionId, source.testDesignId, source.organizationId, source.projectId, source.endpointId, nextVersion,
+      `human_repair_${input.repair.repairId}`, source.contextFingerprint, source.contractVersion, source.specificationVersion,
+      source.provider, source.model, source.promptVersion, source.repairPromptVersion, source.guardVersion,
+      source.scenarioCount, source.readyCount, source.reviewRequiredCount, specificationJson,
+      JSON.stringify(source.generationMetadata), JSON.stringify(source.safeDiagnostics), derivationKey, JSON.stringify(origin), createdAt,
+    );
+    const projection = buildTestDesignExecutionProjection({
+      specificationJson, testDesignVersionId: versionId, testDesignId: source.testDesignId,
+      organizationId: source.organizationId, projectId: source.projectId, endpointId: source.endpointId,
+      testDesignVersion: nextVersion, createdAt,
+    });
+    const updateRoot = db.prepare(
+      `UPDATE test_designs SET latest_version = ?, latest_version_id = ?, updated_at = ? WHERE id = ? AND latest_version_id = ?`
+    ).bind(nextVersion, versionId, createdAt, source.testDesignId, source.id);
+    try {
+      await db.batch([insert, projectionInsertStatement(db, projection), updateRoot]);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const again = await getVersionByDerivationKey(derivationKey);
+        if (again) return { created: false, idempotentReplay: true, version: again };
+      }
+      throw error;
+    }
+    const created = await getVersionById({ organizationId: source.organizationId, projectId: source.projectId, testDesignVersionId: versionId });
+    if (!created) throw new TestRegistryError('Human-repaired Test Design version could not be verified.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_VERIFY_FAILED', status: 500, retryable: true });
+    return { created: true, idempotentReplay: false, version: created };
+  }
+
   async function appendVersion(input) {
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
@@ -534,6 +624,7 @@ export function createTestDesignRepository(db, {
     getVersionByGenerationRequestId,
     getVersionByDerivationKey,
     appendDerivedVersion,
+    appendHumanRequestRepairVersion,
   };
 }
 

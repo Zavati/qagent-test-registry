@@ -24,7 +24,9 @@
     "test:f08-1-3-c": "node --test test/result-evolution-07.8-a.test.mjs",
     "check:08.1.3-c": "npm run check:08.1.3-a && npm run test:f08-1-3-c",
     "test:f08-1-3-c-fix-1": "node --test test/result-evolution-07.8-a.test.mjs",
-    "check:08.1.3-c-fix-1": "npm run check:08.1.3-c && npm run test:f08-1-3-c-fix-1 && npm run check:deploy-config"
+    "check:08.1.3-c-fix-1": "npm run check:08.1.3-c && npm run test:f08-1-3-c-fix-1 && npm run check:deploy-config",
+    "test:f08-1-3-c-fix-3": "node --test test/human-request-repair-08.1.3-c-fix-3.test.mjs",
+    "check:08.1.3-c-fix-3": "npm run check:08.1.3-c-fix-1 && npm run test:f08-1-3-c-fix-3 && npm run check:deploy-config"
   },
   "engines": {
     "node": ">=24"
