@@ -1,7 +1,7 @@
 import { TestRegistryError } from "../domain/errors.js";
 import { registryLimits, validateInternalTenantHeaders } from "./testDesignVersion.js";
 
-const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING"]);
+const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING", "REQUEST_BODY_FIELD_ADD", "REQUEST_BODY_FIELD_REMOVE"]);
 
 function fail(message, path, code = "TEST_REGISTRY_EVOLUTION_INVALID", status = 400) {
   throw new TestRegistryError(message, { code, status, path });
@@ -72,21 +72,45 @@ export function validateDerivedVersionInput(input, env={}) {
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
-    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","source","valueType","generatorKind","generatorConfig"]),path);
+    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180);
-    if(type==="TEST_DATA_BINDING") {
+    if(type==="TEST_DATA_BINDING"||type==="REQUEST_BODY_FIELD_ADD"||type==="REQUEST_BODY_FIELD_REMOVE") {
       const bindingIndex=positiveInt(c.bindingIndex,`${path}.bindingIndex`);
       const key=`${scenarioId}:TEST_DATA:${bindingIndex}`; if(seen.has(key)) fail("Duplicate Test Data binding change.",path); seen.add(key);
-      const target=enumValue(c.target,new Set(["BODY","PATH_PARAM","QUERY"]),`${path}.target`);
+      const target=enumValue(c.target,type==="TEST_DATA_BINDING"?new Set(["BODY","PATH_PARAM","QUERY"]):new Set(["BODY"]),`${path}.target`);
       const selector=text(c.selector,`${path}.selector`,320);
-      const source=enumValue(c.source,new Set(["GENERATED"]),`${path}.source`);
+      if(target==="BODY"){
+        if(!/^\$\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*){0,3}$/.test(selector)) fail("Only bounded simple BODY selectors are supported for payload evolution.",`${path}.selector`);
+        if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(selector)) fail("Sensitive BODY selector is forbidden.",`${path}.selector`,`TEST_REGISTRY_EVOLUTION_FORBIDDEN_FIELD`);
+      }
+      if(type==="REQUEST_BODY_FIELD_REMOVE") {
+        const source=enumValue(c.source,new Set(["GENERATED"]),`${path}.source`);
+        return {type,scenarioId,bindingIndex,target,selector,source};
+      }
+      if(type==="REQUEST_BODY_FIELD_ADD") {
+        const source=enumValue(c.source,new Set(["GENERATED"]),`${path}.source`);
+        const valueType=enumValue(c.valueType,new Set(["STRING","NUMBER","INTEGER","BOOLEAN"]),`${path}.valueType`);
+        const generatorKind=enumValue(c.generatorKind,new Set(["TEXT","NUMBER","INTEGER","BOOLEAN"]),`${path}.generatorKind`);
+        const compatible=(valueType==="STRING"&&generatorKind==="TEXT")||(valueType==="NUMBER"&&generatorKind==="NUMBER")||(valueType==="INTEGER"&&generatorKind==="INTEGER")||(valueType==="BOOLEAN"&&generatorKind==="BOOLEAN");
+        if(!compatible) fail("Test Data generator kind is incompatible with valueType.",`${path}.generatorKind`);
+        const generatorConfig=scalarGeneratorConfig(c.generatorConfig,valueType,`${path}.generatorConfig`);
+        return {type,scenarioId,bindingIndex,target,selector,source,valueType,generatorKind,generatorConfig};
+      }
+      const proposedSourceRaw=String(c.source||'').trim().toUpperCase();
+      const currentSourceInput=c.currentSource??(proposedSourceRaw==="GENERATED"?"GENERATED":null);
+      const currentSource=enumValue(currentSourceInput,new Set(["GENERATED","FIXED","OBSERVED"]),`${path}.currentSource`);
+      const source=enumValue(c.source,new Set(["GENERATED","OBSERVED"]),`${path}.source`);
       const valueType=enumValue(c.valueType,new Set(["STRING","NUMBER","INTEGER","BOOLEAN"]),`${path}.valueType`);
+      if(source==="OBSERVED") {
+        if(c.generatorKind!=null||c.generatorConfig!=null) fail("OBSERVED Test Data evolution cannot carry a generator.",path,"TEST_REGISTRY_EVOLUTION_FORBIDDEN_FIELD");
+        return {type,scenarioId,bindingIndex,target,selector,currentSource,source,valueType};
+      }
       const generatorKind=enumValue(c.generatorKind,new Set(["TEXT","NUMBER","INTEGER","BOOLEAN"]),`${path}.generatorKind`);
       const compatible=(valueType==="STRING"&&generatorKind==="TEXT")||(valueType==="NUMBER"&&generatorKind==="NUMBER")||(valueType==="INTEGER"&&generatorKind==="INTEGER")||(valueType==="BOOLEAN"&&generatorKind==="BOOLEAN");
       if(!compatible) fail("Test Data generator kind is incompatible with valueType.",`${path}.generatorKind`);
       const generatorConfig=scalarGeneratorConfig(c.generatorConfig,valueType,`${path}.generatorConfig`);
-      return {type,scenarioId,bindingIndex,target,selector,source,valueType,generatorKind,generatorConfig};
+      return {type,scenarioId,bindingIndex,target,selector,currentSource,source,valueType,generatorKind,generatorConfig};
     }
     const assertionIndex=positiveInt(c.assertionIndex,`${path}.assertionIndex`);
     const key=`${scenarioId}:${assertionIndex}`; if(seen.has(key)) fail("Duplicate assertion change.",path); seen.add(key);

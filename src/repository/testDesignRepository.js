@@ -79,6 +79,18 @@ function isUniqueConstraintError(error) {
   return /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|SQLITE_CONSTRAINT_PRIMARYKEY/i.test(message);
 }
 
+function plain(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function deleteBodyPath(body, selector) {
+  if (!plain(body) || typeof selector !== "string" || !selector.startsWith("$.")) return;
+  const parts = selector.slice(2).split(".");
+  let cursor = body;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    if (!plain(cursor?.[parts[i]])) return;
+    cursor = cursor[parts[i]];
+  }
+  delete cursor[parts.at(-1)];
+}
+
 function isMissingExecutionProjectionTableError(error) {
   return /no such table:\s*test_design_execution_inventory/i.test(String(error?.message || error || ""));
 }
@@ -206,15 +218,55 @@ export function createTestDesignRepository(db, {
         if (!Array.isArray(bindings)) throw new TestRegistryError("Evolution Test Data bindings are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
         const binding = bindings[change.bindingIndex] || null;
         if (!binding) throw new TestRegistryError("Evolution Test Data binding not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
-        if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== "GENERATED" || change.source !== "GENERATED") {
+        if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== change.currentSource) {
           throw new TestRegistryError("Evolution Test Data binding identity/source mismatch.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_MISMATCH", status: 409 });
         }
         binding.valueType = change.valueType;
-        binding.generator = {
-          ...(binding.generator || {}),
-          kind: change.generatorKind,
-          config: structuredClone(change.generatorConfig || {}),
-        };
+        binding.provenance = { origin: "RESULT_EVOLUTION" };
+        if (change.source === "GENERATED") {
+          binding.source = "GENERATED";
+          delete binding.bindingKey;
+          binding.generator = {
+            ...(binding.generator || {}),
+            kind: change.generatorKind,
+            config: structuredClone(change.generatorConfig || {}),
+          };
+        } else if (change.source === "OBSERVED") {
+          binding.source = "OBSERVED";
+          binding.bindingKey = binding.bindingKey || `${change.target}:${change.selector}`;
+          delete binding.generator;
+        } else {
+          throw new TestRegistryError("Evolution Test Data target source is unsupported.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_MISMATCH", status: 409 });
+        }
+        continue;
+      }
+      if (change.type === "REQUEST_BODY_FIELD_ADD") {
+        if (!scenario.spec) scenario.spec = {};
+        if (!scenario.spec.testData) scenario.spec.testData = { contractVersion: "qagent.test-data-bindings.v1", bindings: [] };
+        const bindings = scenario.spec.testData.bindings;
+        if (!Array.isArray(bindings)) throw new TestRegistryError("Evolution Test Data bindings are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
+        if (bindings.some((binding) => binding?.target === "BODY" && binding?.selector === change.selector)) {
+          throw new TestRegistryError("Evolution BODY field already has a Test Data binding.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_EXISTS", status: 409 });
+        }
+        if (change.bindingIndex !== bindings.length) {
+          throw new TestRegistryError("Evolution BODY field insertion index is stale.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_INDEX_STALE", status: 409 });
+        }
+        bindings.push({
+          target: "BODY", selector: change.selector, source: "GENERATED", valueType: change.valueType,
+          generator: { kind: change.generatorKind, config: structuredClone(change.generatorConfig || {}) },
+          provenance: { origin: "RESULT_EVOLUTION" },
+        });
+        continue;
+      }
+      if (change.type === "REQUEST_BODY_FIELD_REMOVE") {
+        const bindings = scenario?.spec?.testData?.bindings;
+        if (!Array.isArray(bindings)) throw new TestRegistryError("Evolution Test Data bindings are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
+        const binding = bindings[change.bindingIndex] || null;
+        if (!binding || binding.target !== "BODY" || binding.selector !== change.selector || binding.source !== "GENERATED" || change.source !== "GENERATED") {
+          throw new TestRegistryError("Evolution BODY field identity/source mismatch.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_MISMATCH", status: 409 });
+        }
+        bindings.splice(change.bindingIndex, 1);
+        deleteBodyPath(scenario?.spec?.request?.body, change.selector);
         continue;
       }
       const assertions = scenario?.spec?.assertions;
