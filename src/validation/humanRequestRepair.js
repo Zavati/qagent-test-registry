@@ -28,19 +28,31 @@ export function validateHumanRequestRepairInput(input,env={}){
   const seen=new Set();
   const changes=payload.changes.map((raw,i)=>{
     const path=`payload.changes[${i}]`;const c=obj(raw,path);
-    known(c,new Set(['type','scenarioId','bindingIndex','target','selector','currentSource','valueType']),path);
-    if(text(c.type,`${path}.type`,80)!=='SET_FIXED_TEST_DATA')fail('Unsupported human repair change type.',`${path}.type`);
+    const type=text(c.type,`${path}.type`,80).toUpperCase();
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180);
     if(scenarioId!==repair.sourceScenarioId)fail('Human repair scenario does not match source scenario.',`${path}.scenarioId`);
-    const bindingIndex=index(c.bindingIndex,`${path}.bindingIndex`);
-    const target=enumValue(c.target,new Set(['BODY']),`${path}.target`);
-    const selector=text(c.selector,`${path}.selector`,320);
-    if(!/^\$\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*){0,3}$/.test(selector))fail('Only bounded simple BODY selectors are supported.',`${path}.selector`);
-    if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(selector))fail('Sensitive BODY selector is forbidden.',`${path}.selector`,'TEST_REGISTRY_HUMAN_REPAIR_FORBIDDEN_FIELD');
-    const currentSource=enumValue(c.currentSource,new Set(['FIXED','OBSERVED','GENERATED']),`${path}.currentSource`);
     const valueType=enumValue(c.valueType,new Set(['STRING','NUMBER','INTEGER','BOOLEAN']),`${path}.valueType`);
-    const key=`${scenarioId}:${target}:${selector}`;if(seen.has(key))fail('Duplicate human repair selector.',path);seen.add(key);
-    return {type:'SET_FIXED_TEST_DATA',scenarioId,bindingIndex,target,selector,currentSource,valueType};
+    let normalized;
+    if(type==='SET_FIXED_TEST_DATA'){
+      known(c,new Set(['type','scenarioId','bindingIndex','target','selector','currentSource','valueType']),path);
+      const bindingIndex=index(c.bindingIndex,`${path}.bindingIndex`);
+      const target=enumValue(c.target,new Set(['BODY']),`${path}.target`);
+      const selector=text(c.selector,`${path}.selector`,320);
+      if(!/^\$\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*){0,3}$/.test(selector))fail('Only bounded simple BODY selectors are supported.',`${path}.selector`);
+      if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(selector))fail('Sensitive BODY selector is forbidden.',`${path}.selector`,'TEST_REGISTRY_HUMAN_REPAIR_FORBIDDEN_FIELD');
+      const currentSource=enumValue(c.currentSource,new Set(['FIXED','OBSERVED','GENERATED']),`${path}.currentSource`);
+      normalized={type:'SET_FIXED_TEST_DATA',scenarioId,bindingIndex,target,selector,currentSource,valueType};
+    }else if(type==='ADD_FIXED_TEST_DATA'){
+      known(c,new Set(['type','scenarioId','bindingIndex','target','selector','valueType']),path);
+      const bindingIndex=index(c.bindingIndex,`${path}.bindingIndex`);
+      const target=enumValue(c.target,new Set(['QUERY']),`${path}.target`);
+      const selector=text(c.selector,`${path}.selector`,320);
+      if(!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(selector))fail('Only bounded QUERY selectors are supported for unbound repair.',`${path}.selector`);
+      if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(selector))fail('Sensitive QUERY selector is forbidden.',`${path}.selector`,'TEST_REGISTRY_HUMAN_REPAIR_FORBIDDEN_FIELD');
+      normalized={type:'ADD_FIXED_TEST_DATA',scenarioId,bindingIndex,target,selector,valueType};
+    }else fail('Unsupported human repair change type.',`${path}.type`);
+    const key=`${scenarioId}:${normalized.target}:${normalized.selector}`;if(seen.has(key))fail('Duplicate human repair selector.',path);seen.add(key);
+    return normalized;
   });
   const bytes=new TextEncoder().encode(JSON.stringify(payload)).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes)fail('Request body exceeds persistence limit.','payload','TEST_REGISTRY_REQUEST_TOO_LARGE',413);

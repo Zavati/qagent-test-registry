@@ -371,19 +371,40 @@ export function createTestDesignRepository(db, {
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError('Human repair scenario not found in source version.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_SCENARIO_NOT_FOUND', status: 409 });
-      const bindings = scenario?.spec?.testData?.bindings;
-      if (!Array.isArray(bindings)) throw new TestRegistryError('Human repair Test Data bindings are unavailable.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_NOT_FOUND', status: 409 });
-      const binding = bindings[change.bindingIndex] || null;
-      if (!binding) throw new TestRegistryError('Human repair Test Data binding not found.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_NOT_FOUND', status: 409 });
-      if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== change.currentSource) {
-        throw new TestRegistryError('Human repair Test Data binding identity/source mismatch.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_MISMATCH', status: 409 });
+      if (!scenario.spec) scenario.spec = {};
+      if (!scenario.spec.testData) scenario.spec.testData = { contractVersion: 'qagent.test-data-bindings.v1', bindings: [] };
+      if (!Array.isArray(scenario.spec.testData.bindings)) scenario.spec.testData.bindings = [];
+      const bindings = scenario.spec.testData.bindings;
+      if (change.type === 'SET_FIXED_TEST_DATA') {
+        const binding = bindings[change.bindingIndex] || null;
+        if (!binding) throw new TestRegistryError('Human repair Test Data binding not found.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_NOT_FOUND', status: 409 });
+        if (binding.target !== change.target || binding.selector !== change.selector || binding.source !== change.currentSource) {
+          throw new TestRegistryError('Human repair Test Data binding identity/source mismatch.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_TEST_DATA_MISMATCH', status: 409 });
+        }
+        if (binding.source === 'SECRET') throw new TestRegistryError('SECRET Test Data cannot be repaired with a literal.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_SECRET_FORBIDDEN', status: 409 });
+        binding.source = 'FIXED';
+        binding.valueType = change.valueType;
+        binding.bindingKey = binding.bindingKey || `${change.target}:${change.selector}`;
+        delete binding.generator;
+        binding.provenance = { origin: 'USER_DEFINED' };
+        continue;
       }
-      if (binding.source === 'SECRET') throw new TestRegistryError('SECRET Test Data cannot be repaired with a literal.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_SECRET_FORBIDDEN', status: 409 });
-      binding.source = 'FIXED';
-      binding.valueType = change.valueType;
-      binding.bindingKey = binding.bindingKey || `${change.target}:${change.selector}`;
-      delete binding.generator;
-      binding.provenance = { origin: 'USER_DEFINED' };
+      if (change.type === 'ADD_FIXED_TEST_DATA') {
+        if (change.bindingIndex !== bindings.length) throw new TestRegistryError('Human repair Test Data insertion index is stale.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_BINDING_INDEX_STALE', status: 409 });
+        if (bindings.some((binding) => binding?.target === change.target && binding?.selector === change.selector)) {
+          throw new TestRegistryError('Human repair Test Data binding already exists.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_BINDING_EXISTS', status: 409 });
+        }
+        bindings.push({
+          target: change.target,
+          selector: change.selector,
+          source: 'FIXED',
+          valueType: change.valueType,
+          bindingKey: `${change.target}:${change.selector}`,
+          provenance: { origin: 'USER_DEFINED' },
+        });
+        continue;
+      }
+      throw new TestRegistryError('Unsupported human request repair operation.', { code: 'TEST_REGISTRY_HUMAN_REPAIR_CHANGE_UNSUPPORTED', status: 400 });
     }
 
     const nextVersion = root.latestVersion + 1;
