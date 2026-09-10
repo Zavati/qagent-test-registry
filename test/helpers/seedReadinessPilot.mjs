@@ -1,0 +1,3 @@
+import {readFileSync} from 'node:fs';
+import {seed,scenario} from './readinessFixture.mjs';
+export function seedPilot(db){const data=JSON.parse(readFileSync(new URL('../fixtures/readiness-pilot.json',import.meta.url)));for(const e of data.items){const scenarios=e.origins.map(o=>{const s=scenario(o.scenarioId,o.readiness,o.generationClass);if(s.baseline){s.baseline.requestCoverage.status=o.requestCoverage;s.baseline.responseCoverage.status=o.responseCoverage;s.baseline.selfCheck=o.selfCheck;}return s;});seed(db,{endpoint:e.endpoint,version:e.version,method:e.method,path:e.path,scenarios,title:'Test Design '+e.path});}}

@@ -1,0 +1,1765 @@
+{
+  "source": "Anonymized metadata-only projection of the user inventory, 2026-09-10; no requests, credentials or inferred reasons.",
+  "items": [
+    {
+      "endpoint": "cep_000",
+      "version": 2,
+      "method": "POST",
+      "path": "/web/index.php/api/v2/admin/job-titles",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_001",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/leave/leave-types",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_002",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/time/employees/timesheets/list",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_003",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/candidates",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_009",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_004",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/nationalities",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_005",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/time/timesheets/default",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_006",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/educations",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_007",
+      "version": 2,
+      "method": "DELETE",
+      "path": "/web/index.php/api/v2/admin/job-titles",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_008",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/hiring-managers",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_009",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/core/i18n/messages",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_010",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/validation/user-name",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_011",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/organization",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_012",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/users",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_009",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_013",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/leave/employees/leave-requests",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "PARTIAL",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_014",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/core/validation/unique",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_009",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_015",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/candidates/{id}/actions/allowed",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_016",
+      "version": 2,
+      "method": "POST",
+      "path": "/web/index.php/api/v2/admin/nationalities",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_017",
+      "version": 2,
+      "method": "POST",
+      "path": "/web/index.php/api/v2/auth/public/validation/password",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "PARTIAL",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_018",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/pim/employees",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_019",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/leave/workweek",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_020",
+      "version": 2,
+      "method": "POST",
+      "path": "/web/index.php/api/v2/admin/users",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "PARTIAL",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_021",
+      "version": 2,
+      "method": "PUT",
+      "path": "/web/index.php/api/v2/recruitment/candidates/{id}/shortlist",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_022",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/leave/holidays",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_023",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/candidates/{id}/history",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_024",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/vacancies",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_009",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_010",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_025",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/candidates/{id}",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_026",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/theme",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_027",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/recruitment/candidates/statuses",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_028",
+      "version": 2,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/leave/leave-periods",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "READY",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "COMPLETE",
+          "selfCheck": "PASSED",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "REVIEW_REQUIRED"
+        }
+      ]
+    },
+    {
+      "endpoint": "cep_029",
+      "version": 3,
+      "method": "GET",
+      "path": "/web/index.php/api/v2/admin/job-titles",
+      "origins": [
+        {
+          "scenarioId": "scenario_000",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_001",
+          "generationClass": "OBSERVED_BASELINE",
+          "readiness": "NEEDS_DATA",
+          "requestCoverage": "COMPLETE",
+          "responseCoverage": "PARTIAL",
+          "selfCheck": "PARTIAL",
+          "comparisonMode": "STRUCTURE",
+          "environmentId": "env_test"
+        },
+        {
+          "scenarioId": "scenario_002",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_003",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "NEEDS_DATA"
+        },
+        {
+          "scenarioId": "scenario_004",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_005",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_006",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_007",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        },
+        {
+          "scenarioId": "scenario_008",
+          "generationClass": "AI_EXPLORATORY",
+          "readiness": "READY"
+        }
+      ]
+    }
+  ]
+}

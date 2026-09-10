@@ -1,3 +1,4 @@
+import { projectTestReadinessRoute, endpointTestReadinessScenariosRoute } from './routes/testReadinessRoutes.js';
 import { asTestRegistryError } from "./domain/errors.js";
 import {
   appendVersionRoute,
@@ -148,6 +149,15 @@ export async function handleRequest(request, env = {}) {
     if (url.pathname === "/internal/v1/test-registry/test-designs/human-request-repairs") {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       const result = await humanRequestRepairRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
+
+    const readinessMatch = url.pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/test-readiness(?:\/endpoints\/([^/]+)\/scenarios)?$/);
+    if (readinessMatch) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      const params = { projectId: decodeURIComponent(readinessMatch[1]), ...(readinessMatch[2] ? { endpointId: decodeURIComponent(readinessMatch[2]) } : {}) };
+      const read = params.endpointId ? endpointTestReadinessScenariosRoute : projectTestReadinessRoute;
+      const result = await read(request, env, params);
       return json(result.body, { status: result.status });
     }
 

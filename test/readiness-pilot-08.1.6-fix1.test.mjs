@@ -1,0 +1,16 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {fixtureDb,seed,scenario} from './helpers/readinessFixture.mjs';
+import {createTestReadinessRepository} from '../src/repository/testReadinessRepository.js';import {parseTestReadinessQuery as parse} from '../src/domain/testReadinessContracts.js';
+import {seedPilot} from './helpers/seedReadinessPilot.mjs';
+
+test('pilot projection: current totals and exact endpoint/scenario drill-down counts',async()=>{const db=fixtureDb();try{seedPilot(db);const repo=createTestReadinessRepository(db);const list=q=>repo.list({organizationId:'org_test',projectId:'prj_test',query:parse(new URLSearchParams(q))});const all=await list('view=summary');
+ for(const [k,v] of Object.entries({testDesignCount:30,scenarioCount:268,observedBaselineScenarioCount:36,aiExploratoryScenarioCount:232,legacyScenarioCount:0,readyScenarioCount:157,needsDataScenarioCount:36,reviewRequiredScenarioCount:75,needsAuthScenarioCount:0,needsEnvironmentScenarioCount:0,executionEligibleScenarioCount:135,policyBlockedReadyScenarioCount:22}))assert.equal(all.projectSummary[k],v,k);
+ for(const [q,scenarios,endpoints] of [['readiness=READY',157,29],['readiness=NEEDS_DATA',36,15],['readiness=REVIEW_REQUIRED',75,26],['readiness=NEEDS_DATA,REVIEW_REQUIRED,NEEDS_AUTH,NEEDS_ENVIRONMENT',111,27],['generationClass=OBSERVED_BASELINE',36,28],['generationClass=OBSERVED_BASELINE&readiness=READY',26,22],['generationClass=OBSERVED_BASELINE&readiness=NEEDS_DATA',10,9],['generationClass=OBSERVED_BASELINE&readiness=NEEDS_DATA&baselineGap=RESPONSE_PARTIAL',7,6],['generationClass=OBSERVED_BASELINE&readiness=NEEDS_DATA&baselineGap=REQUEST_PARTIAL',3,3]]){
+   const d=await list(q);assert.equal(d.filteredSummary.matchingScenarioCount,scenarios,q);assert.equal(d.filteredSummary.matchingEndpointCount,endpoints,q);assert.equal(d.readinessRevision,all.readinessRevision);
+ }
+ const jobs=await list('generationClass=OBSERVED_BASELINE&readiness=NEEDS_DATA&baselineGap=RESPONSE_PARTIAL&q=job-titles');assert.equal(jobs.items.length,1);assert.equal(jobs.items[0].matchingScenarioCount,2);
+}finally{db.close();}});
+
+test('all detail filters including apiServiceKey apply consistently',async()=>{const db=fixtureDb();try{const item=seed(db);const r=createTestReadinessRepository(db);const query=parse(new URLSearchParams('testDesignVersionId='+item.id+'&apiServiceKey=other'),{detail:true});const d=await r.scenarios({organizationId:'org_test',projectId:'prj_test',endpointId:'cep_a',query});assert.equal(d.matchingScenarioCount,0);assert.equal(d.items.length,0);}finally{db.close();}});
+
+test('valid JSON with divergent state or coverage is not silently trusted',async()=>{const db=fixtureDb();try{seed(db,{scenarios:[scenario('b','NEEDS_DATA','OBSERVED_BASELINE')]});const row=db.raw.prepare('SELECT scenario_origins_json FROM test_design_execution_inventory').get();const origins=JSON.parse(row.scenario_origins_json);origins[0].readiness='READY';db.raw.prepare('UPDATE test_design_execution_inventory SET scenario_origins_json=?').run(JSON.stringify(origins));await assert.rejects(()=>createTestReadinessRepository(db).list({organizationId:'org_test',projectId:'prj_test',query:parse(new URLSearchParams())}),{code:'TEST_READINESS_CORRUPT_PROJECTION'});}finally{db.close();}});
