@@ -1,3 +1,4 @@
+import { applyCurrentMigrations } from './helpers/currentMigrations.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -46,7 +47,8 @@ async function appendInitial(db) {
 
 test('08.1.3-A marks immutable regression snapshot OUTDATED when latest Test Design was derived by Evolution', async () => {
   const db = new SQLiteD1();
-  migrations.forEach((migration) => db.exec(migration));
+  applyCurrentMigrations(db);
+  
   try {
     const initial = await appendInitial(db);
     const materializedResponse = await handleRequest(new Request('https://registry.internal/v1/test-registry/projects/prj_test/suites/auto-ready/materialize?view=compact', {

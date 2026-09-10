@@ -1,3 +1,4 @@
+import { applyCurrentMigrations } from './helpers/currentMigrations.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -80,7 +81,7 @@ test("07.7.10-A schema reserves multiple future USER_DEFINED suites while keepin
 
 test("Project Test Inventory uses only latest Test Design versions and exposes READY ids without request data", async () => {
   const db = new SQLiteD1();
-  db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  applyCurrentMigrations(db);
   try {
     const first = appendPayload({
       endpointId: "cep_a",
@@ -115,7 +116,7 @@ test("Project Test Inventory uses only latest Test Design versions and exposes R
 });
 
 test("Auto Project READY suite is stable, immutable and does not create a new version when inventory is unchanged", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     const payload = appendPayload({
       endpointId: "cep_a",
@@ -164,7 +165,7 @@ test("Auto Project READY suite is stable, immutable and does not create a new ve
 });
 
 test("Auto suite materialization fails closed when the project has no READY scenarios and is tenant isolated", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     const payload = appendPayload({
       endpointId: "cep_blocked",

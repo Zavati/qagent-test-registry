@@ -28,7 +28,9 @@
     "test:f08-1-3-c-fix-3": "node --test test/human-request-repair-08.1.3-c-fix-3.test.mjs",
     "check:08.1.3-c-fix-3": "npm run check:08.1.3-c-fix-1 && npm run test:f08-1-3-c-fix-3 && npm run check:deploy-config",
     "test:f08-1-3-c-fix-4": "node --test test/unbound-request-parameter-repair-08.1.3-c-fix-4.test.mjs",
-    "check:08.1.3-c-fix-4": "npm run check:08.1.3-c-fix-3 && npm run test:f08-1-3-c-fix-4 && npm run check:deploy-config"
+    "check:08.1.3-c-fix-4": "npm run check:08.1.3-c-fix-3 && npm run test:f08-1-3-c-fix-4 && npm run check:deploy-config",
+    "test:f08-1-6": "node --test test/test-08-1-6-observed-baseline.mjs",
+    "check:08.1.6": "npm test && npm run test:f08-1-6"
   },
   "engines": {
     "node": ">=24"

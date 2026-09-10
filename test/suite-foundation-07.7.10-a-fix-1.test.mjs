@@ -1,3 +1,4 @@
+import { applyCurrentMigrations } from './helpers/currentMigrations.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -74,7 +75,7 @@ test("07.7.10-A FIX-1 migration adds the immutable execution inventory projectio
 });
 
 test("READY is not equal to execution-eligible: safe methods enter the Suite and mutations remain policy-blocked", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     const response = await append(db, payload({
       endpointId: "cep_mix",
@@ -110,7 +111,7 @@ test("READY is not equal to execution-eligible: safe methods enter the Suite and
 });
 
 test("a project with only READY mutations fails closed instead of creating a predictably rejected Suite", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     await append(db, payload({
       endpointId: "cep_mutation",
@@ -132,7 +133,7 @@ test("a project with only READY mutations fails closed instead of creating a pre
 });
 
 test("new Test Design versions persist the compact projection in the same write path", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     const response = await append(db, payload({
       endpointId: "cep_fast",
@@ -169,6 +170,7 @@ test("historical latest versions are lazily backfilled once after migration 0003
     }));
     assert.equal(response.status, 201);
     db.exec(migration3);
+    applyCurrentMigrations(db, 3); // Current reader requires additive projections; preserve the original lazy-backfill assertions.
     assert.equal(db.raw.prepare("SELECT COUNT(*) AS c FROM test_design_execution_inventory").get().c, 0);
 
     const first = (await (await handleRequest(new Request("https://registry.internal/v1/test-registry/projects/prj_test/test-inventory", { headers: headers() }), env(db))).json()).data;
@@ -182,7 +184,7 @@ test("historical latest versions are lazily backfilled once after migration 0003
 });
 
 test("compact hot-path reads omit large scenario selections while preserving totals and fingerprint", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     await append(db, payload({
       endpointId: "cep_compact",
@@ -207,7 +209,7 @@ test("compact hot-path reads omit large scenario selections while preserving tot
 });
 
 test("steady-state inventory and latest Suite reads stay O(1) in D1 round-trips (no per-endpoint N+1)", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     for (let i = 0; i < 12; i += 1) {
       const endpointId = `cep_scale_${String(i).padStart(2, "0")}`;
@@ -243,7 +245,7 @@ test("steady-state inventory and latest Suite reads stay O(1) in D1 round-trips 
 });
 
 test("an existing 07.7.10-A Suite v1 becomes OUTDATED and materializes v2 under the safe eligibility policy", async () => {
-  const db = new SQLiteD1(); db.exec(migration1); db.exec(migration2); db.exec(migration3);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     await append(db, payload({
       endpointId: "cep_upgrade",

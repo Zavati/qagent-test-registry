@@ -1,3 +1,4 @@
+import { applyCurrentMigrations } from './helpers/currentMigrations.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -12,7 +13,8 @@ const headers={'content-type':'application/json','x-qagent-organization-id':'org
 const env=db=>({TEST_REGISTRY_DB:db,TEST_REGISTRY_MAX_SPEC_BYTES:'262144',TEST_REGISTRY_MAX_REQUEST_BYTES:'393216'});
 
 test('08.1.3-C FIX-4 adds an immutable USER_DEFINED QUERY binding for an unbound request parameter',async()=>{
-  const db=new SQLiteD1();db.exec(m1);db.exec(m3);db.exec(m5);try{
+  const db=new SQLiteD1();applyCurrentMigrations(db);
+  try{
     const base=appendPayload({generationRequestId:'tdg_unbound_query_fix4'});
     const scenario=base.specification.scenarios[0];
     scenario.spec.target.method='GET';
@@ -35,7 +37,8 @@ test('08.1.3-C FIX-4 adds an immutable USER_DEFINED QUERY binding for an unbound
 });
 
 test('08.1.3-C FIX-4 rejects sensitive and non-QUERY structural additions',async()=>{
-  const db=new SQLiteD1();db.exec(m1);db.exec(m3);db.exec(m5);try{
+  const db=new SQLiteD1();applyCurrentMigrations(db);
+  try{
     const common={organizationId:'org_test',projectId:'prj_test',sourceTestDesignVersionId:'tdv_any',repair:{repairId:'hrr_fix4_invalid',sourceResultSetId:'rset_1',sourceScenarioResultId:'sres_1',sourceScenarioId:'test_001',approvedByUserId:'usr_1',reason:'x'}};
     for(const change of [
       {type:'ADD_FIXED_TEST_DATA',scenarioId:'test_001',bindingIndex:0,target:'QUERY',selector:'token',valueType:'STRING'},

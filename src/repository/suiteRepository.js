@@ -94,6 +94,7 @@ function mapProjection(row, { includeAuxScenarioIds = true } = {}) {
     testDesignId: row.test_design_id,
     testDesignVersionId: row.test_design_version_id,
     testDesignVersion: row.test_design_version,
+    scenarioOrigins: parseJson(row.scenario_origins_json, {fallback: []}),
     title: row.title,
     method: row.target_method,
     path: row.target_path,
@@ -143,6 +144,7 @@ function projectionAsDbRow(projection) {
     blocked_scenario_count: projection.blockedScenarioCount,
     execution_eligible_scenario_count: projection.executionEligibleScenarioCount,
     policy_blocked_ready_scenario_count: projection.policyBlockedReadyScenarioCount,
+    scenario_origins_json: JSON.stringify(projection.scenarioOrigins || []),
     ready_scenario_ids_json: JSON.stringify(projection.readyScenarioIds),
     execution_eligible_scenario_ids_json: JSON.stringify(projection.executionEligibleScenarioIds),
     policy_blocked_ready_scenario_ids_json: JSON.stringify(projection.policyBlockedReadyScenarioIds),
@@ -260,6 +262,7 @@ export function createSuiteRepository(db, {
         p.policy_blocked_ready_scenario_count,
         p.execution_eligible_scenario_ids_json,
         p.policy_blocked_reason_counts_json${auxScenarioColumns},
+        p.scenario_origins_json,
         p.eligibility_policy_version,
         p.created_at
       FROM test_designs d
@@ -338,6 +341,7 @@ export function createSuiteRepository(db, {
       testDesignVersionId: item.testDesignVersionId,
       testDesignVersion: item.testDesignVersion,
       scenarioIds: [...item.readyScenarioIds],
+      scenarioOrigins: item.scenarioOrigins.filter((s) => item.readyScenarioIds.includes(s.scenarioId)),
     }));
     // Fingerprint stays compact and deterministic even when view=compact omits scenario IDs.
     // tdv_* is immutable, so (tdv + ready count) uniquely pins the READY selection for that version.
@@ -360,9 +364,15 @@ export function createSuiteRepository(db, {
       acc.blockedScenarioCount += item.blockedScenarioCount;
       acc.executionEligibleScenarioCount += item.executionEligibleScenarioCount;
       acc.policyBlockedReadyScenarioCount += item.policyBlockedReadyScenarioCount;
+      for (const origin of item.scenarioOrigins) {
+        if(origin.generationClass === 'OBSERVED_BASELINE') acc.observedBaselineScenarioCount++;
+        else if(origin.generationClass === 'AI_EXPLORATORY') acc.aiExploratoryScenarioCount++;
+      }
+      acc.legacyScenarioCount += item.scenarioOrigins.length ? item.scenarioOrigins.filter(s=>s.generationClass==='LEGACY').length : item.scenarioCount;
       aggregateReasonCounts(acc.policyBlockedReasonCounts, item.policyBlockedReasonCounts);
       return acc;
     }, {
+      observedBaselineScenarioCount: 0, aiExploratoryScenarioCount: 0, legacyScenarioCount: 0,
       scenarioCount: 0,
       readyScenarioCount: 0,
       reviewRequiredScenarioCount: 0,
@@ -676,14 +686,14 @@ export function createSuiteRepository(db, {
       INSERT OR IGNORE INTO test_suite_version_items (
         suite_version_id, suite_id, organization_id, project_id, ordinal,
         endpoint_id, test_design_id, test_design_version_id, test_design_version,
-        scenario_count, scenario_ids_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        scenario_count, scenario_ids_json, created_at, scenario_origins_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       full.suiteVersionId, full.suiteId, organizationId, projectId, ordinal,
       item.endpointId, item.testDesignId, item.testDesignVersionId, item.testDesignVersion,
       Array.isArray(item.scenarioIds) ? item.scenarioIds.length : 0,
       JSON.stringify(Array.isArray(item.scenarioIds) ? item.scenarioIds : []),
-      createdAt,
+      createdAt, JSON.stringify(item.scenarioOrigins || []),
     ));
     for (let offset = 0; offset < statements.length; offset += SUITE_ITEM_BACKFILL_BATCH_SIZE) {
       await db.batch(statements.slice(offset, offset + SUITE_ITEM_BACKFILL_BATCH_SIZE));
@@ -721,7 +731,7 @@ export function createSuiteRepository(db, {
     const normalized = await ensureSuiteVersionItems({ organizationId, projectId, version });
     const response = await db.prepare(`
       SELECT i.ordinal, i.endpoint_id, i.test_design_id, i.test_design_version_id,
-             i.test_design_version, i.scenario_count, i.scenario_ids_json,
+             i.test_design_version, i.scenario_count, i.scenario_ids_json, i.scenario_origins_json,
              p.target_method, p.target_path
       FROM test_suite_version_items i
       LEFT JOIN test_design_execution_inventory p
@@ -734,6 +744,7 @@ export function createSuiteRepository(db, {
       ordinal: Number(row.ordinal), endpointId: row.endpoint_id, testDesignId: row.test_design_id,
       testDesignVersionId: row.test_design_version_id, testDesignVersion: Number(row.test_design_version),
       method: row.target_method || null, path: row.target_path || null,
+      scenarioOrigins: parseJson(row.scenario_origins_json, {fallback: []}),
       scenarioCount: Number(row.scenario_count), scenarioIds: parseJson(row.scenario_ids_json, {
         details: { field: "scenario_ids_json", suiteVersionId, ordinal: Number(row.ordinal) }, fallback: [],
       }),

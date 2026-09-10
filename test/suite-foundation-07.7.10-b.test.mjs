@@ -1,3 +1,4 @@
+import { applyCurrentMigrations } from './helpers/currentMigrations.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -48,7 +49,7 @@ test("07.7.10-B migration creates normalized immutable Suite execution items", (
 });
 
 test("exact Suite execution slices are bounded, pinned and lazily normalize legacy selection once", async () => {
-  const db = new SQLiteD1(); db.exec(m1); db.exec(m2); db.exec(m3); db.exec(m4);
+  const db = new SQLiteD1(); applyCurrentMigrations(db);
   try {
     assert.equal((await append(db,"cep_a","tdg_7710b_a_0001")).status, 201);
     assert.equal((await append(db,"cep_b","tdg_7710b_b_0001")).status, 201);

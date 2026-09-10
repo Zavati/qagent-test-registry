@@ -1,3 +1,4 @@
+import { validateObservedBaselineScenario, observedBaselineReady } from '../baselineContract.js';
 import { TestRegistryError } from "../domain/errors.js";
 
 export const TEST_DESIGN_CONTRACT_VERSION = "qagent.test-design.v1";
@@ -149,6 +150,14 @@ export function validateAppendVersionInput(input, env = {}) {
   const provider = assertString(generation.provider, "payload.specification.generation.provider", { max: 80 });
   const model = assertString(generation.model, "payload.specification.generation.model", { max: 160 });
   const counts = validateSummary(specification);
+  for(const scenario of specification.scenarios){
+    try{validateObservedBaselineScenario(scenario,{organizationId,projectId,endpointId});}
+    catch(error){throw new TestRegistryError(error.message,{code:error.code||'OBSERVED_BASELINE_CONTRACT_INVALID',status:409});}
+    if(scenario.generationClass==='OBSERVED_BASELINE'){
+      if(scenario.spec?.testData || Object.values(scenario.spec?.request||{}).some(v=>v!=null&&(typeof v!=='object'||Object.keys(v).length)))fail('Baseline request must remain a reference, not inline values.','specification.scenarios','OBSERVED_BASELINE_INLINE_DATA_FORBIDDEN');
+      if(scenario.automation?.readiness==='READY'&&!observedBaselineReady(scenario.baseline))fail('Incomplete or expired baseline cannot be READY.','specification.scenarios','OBSERVED_BASELINE_NOT_READY');
+    } else if(scenario.generationClass!=null&&scenario.generationClass!=='AI_EXPLORATORY')fail('Unknown generation origin.','specification.scenarios');
+  }
 
   const metadata = payload.metadata == null ? {} : assertPlainObject(payload.metadata, "payload.metadata");
   assertKnownKeys(metadata, METADATA_KEYS, "payload.metadata");

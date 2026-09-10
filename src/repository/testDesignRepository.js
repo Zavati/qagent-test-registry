@@ -1,3 +1,4 @@
+import { assertNoProtectedBaselineChanges, canonicalBaselineJson, isApprovedBaselineRevision } from '../baselineContract.js';
 import { TestRegistryError } from "../domain/errors.js";
 import { buildStableTestDesignId, createTestDesignVersionId } from "../domain/ids.js";
 import { buildTestDesignExecutionProjection, projectionInsertStatement } from "../domain/executionEligibility.js";
@@ -209,6 +210,8 @@ export function createTestDesignRepository(db, {
       });
     }
 
+    try{assertNoProtectedBaselineChanges(source.specification,input.changes.map(c=>c.scenarioId));}
+    catch(error){throw new TestRegistryError(error.message,{code:error.code,status:409});}
     const specification = structuredClone(source.specification);
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
@@ -367,6 +370,8 @@ export function createTestDesignRepository(db, {
       });
     }
 
+    try{assertNoProtectedBaselineChanges(source.specification,input.changes.map(c=>c.scenarioId));}
+    catch(error){throw new TestRegistryError(error.message,{code:error.code,status:409});}
     const specification = structuredClone(source.specification);
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
@@ -508,6 +513,25 @@ export function createTestDesignRepository(db, {
         });
       }
 
+      if(root.latestVersionId){
+        const current=await getVersionById({organizationId:input.organizationId,projectId:input.projectId,testDesignVersionId:root.latestVersionId});
+        const incoming=JSON.parse(input.specificationJson);
+        for(const next of incoming.scenarios||[]){
+          if(!next.baseline?.revision)continue;
+          const prior=(current?.specification?.scenarios||[]).find(s=>s.scenarioId===next.scenarioId&&s.generationClass==='OBSERVED_BASELINE');
+          if(!prior)throw new TestRegistryError('A reviewed baseline must descend from a current protected scenario.',{code:'OBSERVED_BASELINE_REVISION_PARENT_REQUIRED',status:409});
+        }
+        for(const prior of current?.specification?.scenarios||[]){
+          if(prior.generationClass!=='OBSERVED_BASELINE')continue;
+          const successor=incoming.scenarios.find(s=>s.scenarioId===prior.scenarioId&&s.generationClass==='OBSERVED_BASELINE');
+          if(!successor||((canonicalBaselineJson(successor.baseline)!==canonicalBaselineJson(prior.baseline)||canonicalBaselineJson(successor.spec.assertions)!==canonicalBaselineJson(prior.spec.assertions))&&!isApprovedBaselineRevision(prior,successor,root.latestVersionId))){
+            throw new TestRegistryError('Regeneration cannot discard or silently change an observed baseline.',{code:'OBSERVED_BASELINE_PRESERVATION_REQUIRED',status:409});
+          }
+        }
+      }
+      if(!root.latestVersionId && JSON.parse(input.specificationJson).scenarios.some(s=>s.baseline?.revision)){
+        throw new TestRegistryError('A baseline revision requires an existing parent version.',{code:'OBSERVED_BASELINE_REVISION_PARENT_REQUIRED',status:409});
+      }
       const nextVersion = root.latestVersion + 1;
       const versionId = versionIdFactory();
       const createdAt = now().toISOString();

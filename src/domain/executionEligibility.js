@@ -71,6 +71,23 @@ export function buildTestDesignExecutionProjection({
   const specification = parseSpecification(specificationJson);
   const scenarios = Array.isArray(specification.scenarios) ? specification.scenarios : [];
 
+  const scenarioOrigins = scenarios.map((scenario) => {
+    const b = scenario.baseline;
+    return {
+      scenarioId: scenario.scenarioId,
+      generationClass: scenario.generationClass || "LEGACY",
+      readiness: scenario.automation?.readiness || "REVIEW_REQUIRED",
+      ...(scenario.generationClass === "OBSERVED_BASELINE" && b ? {
+        baselineId: b.baselineId, sourceEventId: b.source.eventId,
+        sourceEvidenceId: b.source.evidenceId, observationSessionId: b.source.observationSessionId,
+        environmentId: b.source.environmentId, observedAt: b.source.observedAt,
+        expiresAt: b.expiresAt, schemaVersionId: b.responseSchemaVersionId,
+        schemaHash: b.responseSchemaHash, comparisonMode: b.comparisonPolicy.mode,
+        requestCoverage: b.requestCoverage.status, responseCoverage: b.responseCoverage.status,
+        selfCheck: b.selfCheck,
+      } : {}),
+    };
+  });
   const readyScenarioIds = [];
   const executionEligibleScenarioIds = [];
   const policyBlockedReadyScenarioIds = [];
@@ -127,6 +144,7 @@ export function buildTestDesignExecutionProjection({
     blockedScenarioCount,
     executionEligibleScenarioCount: executionEligibleScenarioIds.length,
     policyBlockedReadyScenarioCount: policyBlockedReadyScenarioIds.length,
+    scenarioOrigins,
     readyScenarioIds,
     executionEligibleScenarioIds,
     policyBlockedReadyScenarioIds,
@@ -146,8 +164,8 @@ export function projectionInsertStatement(db, projection) {
       execution_eligible_scenario_count, policy_blocked_ready_scenario_count,
       ready_scenario_ids_json, execution_eligible_scenario_ids_json,
       policy_blocked_ready_scenario_ids_json, policy_blocked_reason_counts_json,
-      eligibility_policy_version, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      eligibility_policy_version, created_at, scenario_origins_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     projection.testDesignVersionId,
     projection.testDesignId,
@@ -173,6 +191,7 @@ export function projectionInsertStatement(db, projection) {
     JSON.stringify(projection.policyBlockedReasonCounts),
     projection.eligibilityPolicyVersion,
     projection.createdAt,
+    JSON.stringify(projection.scenarioOrigins || []),
   );
 }
 
