@@ -1,4 +1,8 @@
-import { assertNoProtectedBaselineChanges, canonicalBaselineJson, isApprovedBaselineRevision } from '../baselineContract.js';
+import { COVERAGE_CHANGE, applyCoverageToScenario } from '../learningCoverage.js';
+import { confirmationHash } from '../learningConfirmation.js';
+import { applyConfirmationToScenario, CONFIRMATION_TYPE } from '../learningConfirmation.js';
+import { canonicalLearningJson, structuralIsPartial, assertSchemaRefinement } from '../activeLearningSchema.js';
+import { validateObservedBaselineScenario, observedBaselineReady, assertNoProtectedBaselineChanges, canonicalBaselineJson, isApprovedBaselineRevision } from '../baselineContract.js';
 import { TestRegistryError } from "../domain/errors.js";
 import { buildStableTestDesignId, createTestDesignVersionId } from "../domain/ids.js";
 import { buildTestDesignExecutionProjection, projectionInsertStatement } from "../domain/executionEligibility.js";
@@ -192,7 +196,10 @@ export function createTestDesignRepository(db, {
   async function appendDerivedVersion(input) {
     const derivationKey = `RESULT_EVOLUTION:${input.derivation.proposalId}`;
     const replay = await getVersionByDerivationKey(derivationKey);
-    if (replay) return { created: false, idempotentReplay: true, version: replay };
+    if (replay) {
+      if(replay.organizationId!==input.organizationId||replay.projectId!==input.projectId)throw new TestRegistryError('Derivation key belongs to another scope.',{code:'TEST_REGISTRY_IDEMPOTENCY_SCOPE_MISMATCH',status:409});
+      return { created: false, idempotentReplay: true, version: replay };
+    }
 
     const source = await getVersionById({
       organizationId: input.organizationId,
@@ -210,12 +217,61 @@ export function createTestDesignRepository(db, {
       });
     }
 
-    try{assertNoProtectedBaselineChanges(source.specification,input.changes.map(c=>c.scenarioId));}
+    try{assertNoProtectedBaselineChanges(source.specification,input.changes.filter(c=>c.type!=='SCHEMA_ENRICHMENT').map(c=>c.scenarioId));}
     catch(error){throw new TestRegistryError(error.message,{code:error.code,status:409});}
     const specification = structuredClone(source.specification);
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
+      if(change.type===COVERAGE_CHANGE){
+        if(!input.derivation.approvedByUserId||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Coverage extension requires isolated reviewed changes.',{code:'LEARNING_COVERAGE_APPROVAL_REQUIRED',status:409});
+        const extended=await applyCoverageToScenario(scenario,change.coverageProof,source),p=change.coverageProof.execution,e=change.learningSource;
+        extended.learning={contractVersion:'qagent.scenario-learning.v1',kind:'ASSERTION_COVERAGE_EXTENSION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:await confirmationHash(extended.spec.assertions),sourceAssertionsHash:p.assertionsHash,assertionCount:extended.spec.assertions.length,assertionsUnchanged:false,existingAssertionsPreserved:true,addedAssertions:change.coverageProof.additions,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,approvedAt:now().toISOString()};
+        Object.assign(scenario,extended);continue;
+      }
+      if(change.type===CONFIRMATION_TYPE){
+        if(!input.derivation.approvedByUserId||!input.derivation.approvalReason)throw new TestRegistryError('Explicit approval required.',{code:'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',status:409});
+        if(input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Conflicting scenario changes.',{code:'TEST_EVOLUTION_BATCH_CHANGE_CONFLICT',status:409});
+        const confirmed=await applyConfirmationToScenario(scenario,change.confirmationProof,source);
+        const p=change.confirmationProof,e=change.learningSource;
+        confirmed.learning={contractVersion:'qagent.scenario-learning.v1',kind:'HYPOTHESIS_CONFIRMATION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:p.assertionsHash,assertionCount:p.assertionCount,assertionsUnchanged:true,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,approvedAt:now().toISOString()};
+        Object.assign(scenario,confirmed);
+        continue;
+      }
+      if(change.type === "SCHEMA_ENRICHMENT") {
+        const proof=change.learningProof, evidence=change.learningSource;
+        const assertion=scenario.spec?.assertions?.[change.assertionIndex];
+        const stop=(code)=>{throw new TestRegistryError('Learning proof cannot enrich this source scenario.',{code,status:409});};
+        if(!assertion||assertion.type!=='SCHEMA'||assertion.schemaRef!==proof.currentSchemaVersionId||proof.endpointId!==source.endpointId||proof.organizationId!==source.organizationId||proof.projectId!==source.projectId||evidence.testDesignVersionId!==source.id)stop('LEARNING_SOURCE_MISMATCH');
+        if(!['GET','HEAD','OPTIONS'].includes(scenario.spec?.target?.method))stop('LEARNING_MUTATION_NOT_SUPPORTED');
+        const statuses=(scenario.spec.assertions||[]).filter(a=>a.type==='STATUS').flatMap(a=>a.expectedStatusCodes||[]);
+        if(!statuses.includes(proof.statusCode))stop('LEARNING_KNOWN_RULE_CONFLICT');
+        if(!structuralIsPartial(proof.currentSchema))stop('LEARNING_SOURCE_SCHEMA_ALREADY_COMPLETE');
+        const hash=async(value)=>'sch_'+[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonicalLearningJson(value))))].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,40);
+        if(await hash(proof.currentSchema)!==proof.currentSchemaHash||await hash(proof.schema)!==proof.schemaHash)stop('LEARNING_SCHEMA_HASH_MISMATCH');
+        try{assertSchemaRefinement(proof.currentSchema,proof.schema);}catch(e){stop(e.code||'LEARNING_INVARIANT_WEAKENED');}
+        const approvedAt=now().toISOString();
+        if(scenario.generationClass==='OBSERVED_BASELINE'){
+          const b=scenario.baseline;
+          try{validateObservedBaselineScenario(scenario,source);}catch(e){stop(e.code);}
+          if(!input.derivation.approvedByUserId)stop('LEARNING_BASELINE_HUMAN_APPROVAL_REQUIRED');
+          if(b.enrichment||b.responseCoverage.status!=='PARTIAL'||b.requestCoverage.status!=='COMPLETE'||b.selfCheck!=='PARTIAL'||Date.parse(b.expiresAt)<=Date.parse(approvedAt))stop('LEARNING_BASELINE_SOURCE_UNUSABLE');
+          if(b.source.environmentId!==evidence.environmentId||b.responseSchemaVersionId!==proof.currentSchemaVersionId||b.responseSchemaHash!==proof.currentSchemaHash||b.source.statusCode!==proof.statusCode)stop('LEARNING_BASELINE_SCOPE_MISMATCH');
+          const operational=(scenario.automation?.blockers||[]).filter(b=>!['OBSERVED_BASELINE_RESPONSE_INCOMPLETE','OBSERVED_BASELINE_SELF_CHECK_INCOMPLETE'].includes(b));
+          if(operational.length||!scenario.spec?.target?.apiServiceKey||(scenario.spec?.auth?.requirement==='REQUIRED'&&!scenario.spec.auth.authProfileRef))stop('LEARNING_BASELINE_OPERATIONAL_BLOCK');
+          b.enrichment={contractVersion:'qagent.baseline-enrichment.v1',proposalId:evidence.proposalId,sourceResultSetId:evidence.resultSetId,sourceScenarioResultId:evidence.scenarioResultId,sourceRunId:evidence.runId,sourceTestDesignVersionId:source.id,environmentId:evidence.environmentId,responseSchemaVersionId:change.schemaRef,responseSchemaHash:proof.schemaHash,approvedByUserId:input.derivation.approvedByUserId,approvedAt,selfCheck:'PASSED'};
+          scenario.automation={...scenario.automation,readiness:'READY',blockers:[],evolutionState:'LEARNING'};
+        }else{
+          // Expectations can be completed without changing request bindings or claims
+          // about the initial observation. This marker is not verification evidence.
+          scenario.learning={contractVersion:'qagent.scenario-learning.v1',phase:'PENDING_VERIFICATION',proposalId:evidence.proposalId,sourceResultSetId:evidence.resultSetId,sourceScenarioResultId:evidence.scenarioResultId,sourceRunId:evidence.runId,sourceTestDesignVersionId:source.id,environmentId:evidence.environmentId,responseSchemaVersionId:change.schemaRef,responseSchemaHash:proof.schemaHash,approvedByUserId:input.derivation.approvedByUserId||null,approvedAt};
+          scenario.automation={...scenario.automation,evolutionState:'LEARNING'};
+        }
+        assertion.schemaRef=change.schemaRef;
+        if(scenario.grounding){const refs=new Set(scenario.grounding.schemaRefs||[]);refs.add(change.schemaRef);scenario.grounding.schemaRefs=[...refs];}
+        if(scenario.generationClass==='OBSERVED_BASELINE')try{validateObservedBaselineScenario(scenario,source);}catch(e){stop(e.code);}
+        continue;
+      }
       if (change.type === "TEST_DATA_BINDING") {
         const bindings = scenario?.spec?.testData?.bindings;
         if (!Array.isArray(bindings)) throw new TestRegistryError("Evolution Test Data bindings are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_TEST_DATA_NOT_FOUND", status: 409 });
@@ -305,6 +361,10 @@ export function createTestDesignRepository(db, {
       }
     }
 
+    const counts={scenarioCount:specification.scenarios.length,readyCount:0,reviewRequiredCount:0};
+    const byReadiness={};
+    for(const scenario of specification.scenarios){const r=scenario.automation?.readiness||'REVIEW_REQUIRED';byReadiness[r]=(byReadiness[r]||0)+1;if(r==='READY')counts.readyCount++;if(r==='REVIEW_REQUIRED')counts.reviewRequiredCount++;}
+    specification.summary={...specification.summary,scenarioCount:counts.scenarioCount,readyCount:counts.readyCount,byReadiness};
     const nextVersion = root.latestVersion + 1;
     const versionId = versionIdFactory();
     const createdAt = now().toISOString();
@@ -313,6 +373,7 @@ export function createTestDesignRepository(db, {
       sourceResultSetId: input.derivation.sourceResultSetId, sourceScenarioResultId: input.derivation.sourceScenarioResultId,
       sourceTestDesignVersionId: source.id, approvedByUserId: input.derivation.approvedByUserId || null,
       approvalReason: input.derivation.approvalReason || null,
+      ...(input.derivation.proposals?{proposals:input.derivation.proposals}:{}),
     };
     const specificationJson = JSON.stringify(specification);
     const insert = db.prepare(
@@ -321,12 +382,12 @@ export function createTestDesignRepository(db, {
          contract_version, specification_version, provider, model, prompt_version, repair_prompt_version, guard_version,
          scenario_count, ready_count, review_required_count, specification_json, generation_metadata_json, safe_diagnostics_json,
          derivation_key, version_origin_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, CASE WHEN EXISTS (SELECT 1 FROM test_designs WHERE id=? AND latest_version_id=? AND status='ACTIVE') THEN ? ELSE NULL END, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      versionId, source.testDesignId, source.organizationId, source.projectId, source.endpointId, nextVersion,
+      versionId, source.testDesignId, source.id, source.testDesignId, source.organizationId, source.projectId, source.endpointId, nextVersion,
       `evolution_${input.derivation.proposalId}`, source.contextFingerprint, source.contractVersion, source.specificationVersion,
       source.provider, source.model, source.promptVersion, source.repairPromptVersion, source.guardVersion,
-      source.scenarioCount, source.readyCount, source.reviewRequiredCount, specificationJson,
+      counts.scenarioCount, counts.readyCount, counts.reviewRequiredCount, specificationJson,
       JSON.stringify(source.generationMetadata), JSON.stringify(source.safeDiagnostics), derivationKey, JSON.stringify(origin), createdAt,
     );
     const projection = buildTestDesignExecutionProjection({
@@ -343,6 +404,8 @@ export function createTestDesignRepository(db, {
         const again = await getVersionByDerivationKey(derivationKey);
         if (again) return { created: false, idempotentReplay: true, version: again };
       }
+      const current=await getRootByScope(source);
+      if(!current||current.latestVersionId!==source.id||current.status!=='ACTIVE')throw new TestRegistryError('Source Test Design version changed during approval.',{code:'TEST_REGISTRY_EVOLUTION_SOURCE_STALE',status:409});
       throw error;
     }
     const created = await getVersionById({ organizationId: source.organizationId, projectId: source.projectId, testDesignVersionId: versionId });
@@ -517,6 +580,8 @@ export function createTestDesignRepository(db, {
         const current=await getVersionById({organizationId:input.organizationId,projectId:input.projectId,testDesignVersionId:root.latestVersionId});
         const incoming=JSON.parse(input.specificationJson);
         for(const next of incoming.scenarios||[]){
+          const predecessor=(current?.specification?.scenarios||[]).find(s=>s.scenarioId===next.scenarioId);
+          if((next.baseline?.enrichment&&canonicalBaselineJson(next.baseline.enrichment)!==canonicalBaselineJson(predecessor?.baseline?.enrichment))||(next.learning&&canonicalBaselineJson(next.learning)!==canonicalBaselineJson(predecessor?.learning)))throw new TestRegistryError('Learning lineage must be created by reviewed Evolution.',{code:'LEARNING_CONTROLLED_DERIVATION_REQUIRED',status:409});
           if(!next.baseline?.revision)continue;
           const prior=(current?.specification?.scenarios||[]).find(s=>s.scenarioId===next.scenarioId&&s.generationClass==='OBSERVED_BASELINE');
           if(!prior)throw new TestRegistryError('A reviewed baseline must descend from a current protected scenario.',{code:'OBSERVED_BASELINE_REVISION_PARENT_REQUIRED',status:409});
@@ -529,7 +594,7 @@ export function createTestDesignRepository(db, {
           }
         }
       }
-      if(!root.latestVersionId && JSON.parse(input.specificationJson).scenarios.some(s=>s.baseline?.revision)){
+      if(!root.latestVersionId && JSON.parse(input.specificationJson).scenarios.some(s=>s.baseline?.revision||s.baseline?.enrichment||s.learning)){
         throw new TestRegistryError('A baseline revision requires an existing parent version.',{code:'OBSERVED_BASELINE_REVISION_PARENT_REQUIRED',status:409});
       }
       const nextVersion = root.latestVersion + 1;

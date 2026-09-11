@@ -1,7 +1,10 @@
+import { COVERAGE_CHANGE, validateCoverageProof } from '../learningCoverage.js';
+import { validateConfirmationProof, CONFIRMATION_TYPE } from '../learningConfirmation.js';
+import { validateLearningSchema } from '../activeLearningSchema.js';
 import { TestRegistryError } from "../domain/errors.js";
 import { registryLimits, validateInternalTenantHeaders } from "./testDesignVersion.js";
 
-const ALLOWED_TYPES = new Set(["STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING", "REQUEST_BODY_FIELD_ADD", "REQUEST_BODY_FIELD_REMOVE"]);
+const ALLOWED_TYPES = new Set([COVERAGE_CHANGE, CONFIRMATION_TYPE, "STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "SCHEMA_ENRICHMENT", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING", "REQUEST_BODY_FIELD_ADD", "REQUEST_BODY_FIELD_REMOVE"]);
 
 function fail(message, path, code = "TEST_REGISTRY_EVOLUTION_INVALID", status = 400) {
   throw new TestRegistryError(message, { code, status, path });
@@ -61,20 +64,39 @@ export function validateDerivedVersionInput(input, env={}) {
   const projectId=text(payload.projectId,"payload.projectId",160);
   const sourceTestDesignVersionId=text(payload.sourceTestDesignVersionId,"payload.sourceTestDesignVersionId",180);
   const derivation=object(payload.derivation,"payload.derivation");
-  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason"]),"payload.derivation");
+  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason","proposals"]),"payload.derivation");
   if(derivation.type!=="RESULT_EVOLUTION") fail("Unsupported derivation type.","payload.derivation.type");
   const proposalId=text(derivation.proposalId,"payload.derivation.proposalId",180);
   const sourceResultSetId=text(derivation.sourceResultSetId,"payload.derivation.sourceResultSetId",180);
   const sourceScenarioResultId=text(derivation.sourceScenarioResultId,"payload.derivation.sourceScenarioResultId",180);
   const approvedByUserId=derivation.approvedByUserId==null?null:text(derivation.approvedByUserId,"payload.derivation.approvedByUserId",180);
   const approvalReason=derivation.approvalReason==null?null:text(derivation.approvalReason,"payload.derivation.approvalReason",1000);
+  let proposals;
+  if(derivation.proposals!=null){
+    if(!Array.isArray(derivation.proposals)||derivation.proposals.length<1||derivation.proposals.length>10)fail("Invalid grouped proposal lineage.","payload.derivation.proposals");
+    const ids=new Set();proposals=derivation.proposals.map((raw,i)=>{const path=`payload.derivation.proposals[${i}]`,m=object(raw,path);known(m,new Set(["proposalId","scenarioId","sourceResultSetId","sourceScenarioResultId"]),path);
+      const item=Object.fromEntries(["proposalId","scenarioId","sourceResultSetId","sourceScenarioResultId"].map(k=>[k,text(m[k],`${path}.${k}`,180)]));if(ids.has(item.proposalId))fail("Duplicate proposal lineage.",path);ids.add(item.proposalId);return item;});
+  }
   if(!Array.isArray(payload.changes)||payload.changes.length<1||payload.changes.length>30) fail("At least one controlled change is required.","payload.changes");
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
-    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig"]),path);
+    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig","learningProof","learningSource","confirmationProof","coverageProof"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180);
+    if(type===CONFIRMATION_TYPE||type===COVERAGE_CHANGE){
+      const isCoverage=type===COVERAGE_CHANGE;
+      known(c,new Set(['type','scenarioId','assertionIndex',isCoverage?'coverageProof':'confirmationProof','learningSource']),path);
+      if(c.assertionIndex!==0||!approvedByUserId||!approvalReason)fail('Hypothesis confirmation requires explicit approval.',path,'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',409);
+      let proof,coverageProof;try{if(isCoverage){coverageProof=validateCoverageProof(c.coverageProof);proof=coverageProof.execution;}else proof=validateConfirmationProof(c.confirmationProof);}catch(e){fail(e.message,path,e.code,409);}
+      const source=object(c.learningSource,`${path}.learningSource`);known(source,new Set(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId']),path);
+      const ls=Object.fromEntries(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].map(k=>[k,text(source[k],`${path}.learningSource.${k}`,180)]));
+      if(proof.organizationId!==organizationId||proof.projectId!==projectId||proof.scenarioId!==scenarioId||proof.testDesignVersionId!==sourceTestDesignVersionId||['resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].some(k=>ls[k]!==proof[k]))fail('Confirmation proof scope mismatch.',path,'LEARNING_CONFIRMATION_SCOPE_MISMATCH',409);
+      const members=proposals||[{proposalId,scenarioId,sourceResultSetId,sourceScenarioResultId}];
+      if(!members.some(m=>m.proposalId===ls.proposalId&&m.scenarioId===scenarioId&&m.sourceResultSetId===ls.resultSetId&&m.sourceScenarioResultId===ls.scenarioResultId))fail('Confirmation lineage mismatch.',path,'LEARNING_CONFIRMATION_SCOPE_MISMATCH',409);
+      if(payload.changes.filter(x=>x.scenarioId===scenarioId).length!==1)fail('Confirmation cannot be combined with another change on the same scenario.',path,'TEST_EVOLUTION_BATCH_CHANGE_CONFLICT',409);
+      return {type,scenarioId,assertionIndex:0,...(isCoverage?{coverageProof}:{confirmationProof:proof}),learningSource:ls};
+    }
     if(type==="TEST_DATA_BINDING"||type==="REQUEST_BODY_FIELD_ADD"||type==="REQUEST_BODY_FIELD_REMOVE") {
       const bindingIndex=positiveInt(c.bindingIndex,`${path}.bindingIndex`);
       const key=`${scenarioId}:TEST_DATA:${bindingIndex}`; if(seen.has(key)) fail("Duplicate Test Data binding change.",path); seen.add(key);
@@ -117,6 +139,20 @@ export function validateDerivedVersionInput(input, env={}) {
     if(type==="STATUS_EXPECTATION") return {type,scenarioId,assertionIndex,expectedStatusCodes:statusCodes(c.expectedStatusCodes,`${path}.expectedStatusCodes`)};
     if(type==="CONTENT_TYPE_EXPECTATION") return {type,scenarioId,assertionIndex,expectedContentTypes:contentTypes(c.expectedContentTypes,`${path}.expectedContentTypes`)};
     if(type==="SCHEMA_EXPECTATION") return {type,scenarioId,assertionIndex,schemaRef:text(c.schemaRef,`${path}.schemaRef`,240)};
+    if(type==="SCHEMA_ENRICHMENT"){
+      const schemaRef=text(c.schemaRef,`${path}.schemaRef`,240),proof=object(c.learningProof,`${path}.learningProof`),source=object(c.learningSource,`${path}.learningSource`);
+      known(proof,new Set(["organizationId","projectId","endpointId","environmentId","statusCode","sourceResultSetId","sourceScenarioResultId","currentSchema","currentSchemaHash","currentSchemaVersionId","schema","schemaHash"]),`${path}.learningProof`);
+      known(source,new Set(["proposalId","resultSetId","scenarioResultId","runId","testDesignVersionId","environmentId"]),`${path}.learningSource`);
+      const learningSource=Object.fromEntries(["proposalId","resultSetId","scenarioResultId","runId","testDesignVersionId","environmentId"].map(k=>[k,text(source[k],`${path}.learningSource.${k}`,180)]));
+      const learningProof=Object.fromEntries(["organizationId","projectId","endpointId","environmentId","sourceResultSetId","sourceScenarioResultId","currentSchemaHash","currentSchemaVersionId","schemaHash"].map(k=>[k,text(proof[k],`${path}.learningProof.${k}`,240)]));
+      if(!Number.isInteger(proof.statusCode)||proof.statusCode<200||proof.statusCode>=300)fail("Learning requires compatible successful response.",path);
+      learningProof.statusCode=proof.statusCode;
+      try{learningProof.currentSchema=validateLearningSchema(proof.currentSchema);learningProof.schema=validateLearningSchema(proof.schema,{allowPartial:false});}catch(e){fail("Invalid bounded structural learning proof.",path,e.code||"LEARNING_SCHEMA_INVALID");}
+      if(learningProof.organizationId!==organizationId||learningProof.projectId!==projectId||learningSource.testDesignVersionId!==sourceTestDesignVersionId||learningProof.environmentId!==learningSource.environmentId||learningProof.sourceResultSetId!==learningSource.resultSetId||learningProof.sourceScenarioResultId!==learningSource.scenarioResultId)fail("Learning proof scope mismatch.",path,"LEARNING_PROOF_SCOPE_MISMATCH",409);
+      const members=proposals||[{proposalId,scenarioId,sourceResultSetId,sourceScenarioResultId}];
+      if(!members.some(m=>m.proposalId===learningSource.proposalId&&m.scenarioId===scenarioId&&m.sourceResultSetId===learningSource.resultSetId&&m.sourceScenarioResultId===learningSource.scenarioResultId))fail("Learning proof lineage mismatch.",path,"LEARNING_PROOF_SCOPE_MISMATCH",409);
+      return {type,scenarioId,assertionIndex,schemaRef,learningProof,learningSource};
+    }
     const jsonPath=text(c.path,`${path}.path`,500);
     if(!/^\$\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)?$/.test(jsonPath)) fail("Only simple non-sensitive JSON paths are supported for learning.",`${path}.path`);
     if(/(?:password|passwd|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|client[_-]?secret)/i.test(jsonPath)) fail("Sensitive JSON path is forbidden.",`${path}.path`,`TEST_REGISTRY_EVOLUTION_FORBIDDEN_FIELD`);
@@ -126,7 +162,7 @@ export function validateDerivedVersionInput(input, env={}) {
   });
   const serialized=JSON.stringify(payload); const bytes=new TextEncoder().encode(serialized).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes) fail("Request body exceeds persistence limit.","payload","TEST_REGISTRY_REQUEST_TOO_LARGE",413);
-  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason},changes};
+  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason,...(proposals?{proposals}:{})},changes};
 }
 
 export { validateInternalTenantHeaders };

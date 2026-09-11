@@ -1,3 +1,4 @@
+import { COVERAGE_ASSERTION_TYPES, validateCoverageAssertion } from '../coverageAssertions.js';
 import { validateObservedBaselineScenario, observedBaselineReady } from '../baselineContract.js';
 import { TestRegistryError } from "../domain/errors.js";
 
@@ -151,6 +152,7 @@ export function validateAppendVersionInput(input, env = {}) {
   const model = assertString(generation.model, "payload.specification.generation.model", { max: 160 });
   const counts = validateSummary(specification);
   for(const scenario of specification.scenarios){
+    for(const a of scenario.spec?.assertions||[])if(COVERAGE_ASSERTION_TYPES.has(a.type))try{validateCoverageAssertion(a);}catch(e){fail(e.message,'specification.scenarios',e.code);}
     try{validateObservedBaselineScenario(scenario,{organizationId,projectId,endpointId});}
     catch(error){throw new TestRegistryError(error.message,{code:error.code||'OBSERVED_BASELINE_CONTRACT_INVALID',status:409});}
     if(scenario.generationClass==='OBSERVED_BASELINE'){
