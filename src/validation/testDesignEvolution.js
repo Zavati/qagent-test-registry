@@ -1,10 +1,12 @@
+import { NEGATIVE_REPAIR_CHANGE } from '../negativeRequestStrategy.js';
+import { validateNegativeRepairProof } from '../negativeRequestRepair.js';
 import { COVERAGE_CHANGE, validateCoverageProof } from '../learningCoverage.js';
 import { validateConfirmationProof, CONFIRMATION_TYPE } from '../learningConfirmation.js';
 import { validateLearningSchema } from '../activeLearningSchema.js';
 import { TestRegistryError } from "../domain/errors.js";
 import { registryLimits, validateInternalTenantHeaders } from "./testDesignVersion.js";
 
-const ALLOWED_TYPES = new Set([COVERAGE_CHANGE, CONFIRMATION_TYPE, "STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "SCHEMA_ENRICHMENT", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING", "REQUEST_BODY_FIELD_ADD", "REQUEST_BODY_FIELD_REMOVE"]);
+const ALLOWED_TYPES = new Set([NEGATIVE_REPAIR_CHANGE,COVERAGE_CHANGE, CONFIRMATION_TYPE, "STATUS_EXPECTATION", "CONTENT_TYPE_EXPECTATION", "SCHEMA_EXPECTATION", "SCHEMA_ENRICHMENT", "JSON_PATH_EQUALS_EXPECTATION", "ADD_JSON_PATH_EQUALS_ASSERTION", "TEST_DATA_BINDING", "REQUEST_BODY_FIELD_ADD", "REQUEST_BODY_FIELD_REMOVE"]);
 
 function fail(message, path, code = "TEST_REGISTRY_EVOLUTION_INVALID", status = 400) {
   throw new TestRegistryError(message, { code, status, path });
@@ -81,21 +83,21 @@ export function validateDerivedVersionInput(input, env={}) {
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
-    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig","learningProof","learningSource","confirmationProof","coverageProof"]),path);
+    known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig","learningProof","learningSource","confirmationProof","coverageProof","repairProof"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180);
-    if(type===CONFIRMATION_TYPE||type===COVERAGE_CHANGE){
-      const isCoverage=type===COVERAGE_CHANGE;
-      known(c,new Set(['type','scenarioId','assertionIndex',isCoverage?'coverageProof':'confirmationProof','learningSource']),path);
+    if(type===CONFIRMATION_TYPE||type===COVERAGE_CHANGE||type===NEGATIVE_REPAIR_CHANGE){
+      const isCoverage=type===COVERAGE_CHANGE,isRepair=type===NEGATIVE_REPAIR_CHANGE;
+      known(c,new Set(['type','scenarioId','assertionIndex',isRepair?'repairProof':isCoverage?'coverageProof':'confirmationProof','learningSource']),path);
       if(c.assertionIndex!==0||!approvedByUserId||!approvalReason)fail('Hypothesis confirmation requires explicit approval.',path,'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',409);
-      let proof,coverageProof;try{if(isCoverage){coverageProof=validateCoverageProof(c.coverageProof);proof=coverageProof.execution;}else proof=validateConfirmationProof(c.confirmationProof);}catch(e){fail(e.message,path,e.code,409);}
+      let proof,coverageProof;try{if(isRepair){proof=validateNegativeRepairProof(c.repairProof);}else if(isCoverage){coverageProof=validateCoverageProof(c.coverageProof);proof=coverageProof.execution;}else proof=validateConfirmationProof(c.confirmationProof);}catch(e){fail(e.message,path,e.code,409);}
       const source=object(c.learningSource,`${path}.learningSource`);known(source,new Set(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId']),path);
       const ls=Object.fromEntries(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].map(k=>[k,text(source[k],`${path}.learningSource.${k}`,180)]));
       if(proof.organizationId!==organizationId||proof.projectId!==projectId||proof.scenarioId!==scenarioId||proof.testDesignVersionId!==sourceTestDesignVersionId||['resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].some(k=>ls[k]!==proof[k]))fail('Confirmation proof scope mismatch.',path,'LEARNING_CONFIRMATION_SCOPE_MISMATCH',409);
       const members=proposals||[{proposalId,scenarioId,sourceResultSetId,sourceScenarioResultId}];
       if(!members.some(m=>m.proposalId===ls.proposalId&&m.scenarioId===scenarioId&&m.sourceResultSetId===ls.resultSetId&&m.sourceScenarioResultId===ls.scenarioResultId))fail('Confirmation lineage mismatch.',path,'LEARNING_CONFIRMATION_SCOPE_MISMATCH',409);
       if(payload.changes.filter(x=>x.scenarioId===scenarioId).length!==1)fail('Confirmation cannot be combined with another change on the same scenario.',path,'TEST_EVOLUTION_BATCH_CHANGE_CONFLICT',409);
-      return {type,scenarioId,assertionIndex:0,...(isCoverage?{coverageProof}:{confirmationProof:proof}),learningSource:ls};
+      return {type,scenarioId,assertionIndex:0,...(isRepair?{repairProof:proof}:isCoverage?{coverageProof}:{confirmationProof:proof}),learningSource:ls};
     }
     if(type==="TEST_DATA_BINDING"||type==="REQUEST_BODY_FIELD_ADD"||type==="REQUEST_BODY_FIELD_REMOVE") {
       const bindingIndex=positiveInt(c.bindingIndex,`${path}.bindingIndex`);

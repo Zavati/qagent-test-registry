@@ -1,3 +1,5 @@
+import { NEGATIVE_REPAIR_CHANGE, negativePreparationGate } from '../negativeRequestStrategy.js';
+import { applyNegativeRepairToScenario } from '../negativeRequestRepair.js';
 import { COVERAGE_CHANGE, applyCoverageToScenario } from '../learningCoverage.js';
 import { confirmationHash } from '../learningConfirmation.js';
 import { applyConfirmationToScenario, CONFIRMATION_TYPE } from '../learningConfirmation.js';
@@ -223,6 +225,12 @@ export function createTestDesignRepository(db, {
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
+      if(change.type===NEGATIVE_REPAIR_CHANGE){
+        if(!input.derivation.approvedByUserId||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Request repair requires isolated reviewed changes.',{code:'NEGATIVE_REQUEST_REPAIR_APPROVAL_REQUIRED',status:409});
+        const repaired=await applyNegativeRepairToScenario(scenario,change.repairProof,source),p=change.repairProof,e=change.learningSource;
+        repaired.learning={contractVersion:'qagent.scenario-learning.v1',kind:NEGATIVE_REPAIR_CHANGE,phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:p.assertionsHash,assertionsUnchanged:true,invalidityProven:false,approvedByUserId:input.derivation.approvedByUserId,approvedAt:now().toISOString()};
+        Object.assign(scenario,repaired);continue;
+      }
       if(change.type===COVERAGE_CHANGE){
         if(!input.derivation.approvedByUserId||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Coverage extension requires isolated reviewed changes.',{code:'LEARNING_COVERAGE_APPROVAL_REQUIRED',status:409});
         const extended=await applyCoverageToScenario(scenario,change.coverageProof,source),p=change.coverageProof.execution,e=change.learningSource;
@@ -328,12 +336,14 @@ export function createTestDesignRepository(db, {
         deleteBodyPath(scenario?.spec?.request?.body, change.selector);
         continue;
       }
+      const negative=negativePreparationGate(scenario);if(!negative.allowed)throw new TestRegistryError('Negative condition is not modeled.',{code:negative.reason,status:409});
       const assertions = scenario?.spec?.assertions;
       if (!Array.isArray(assertions)) throw new TestRegistryError("Evolution assertions are unavailable in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
       const assertion = assertions[change.assertionIndex] || null;
       if (change.type !== "ADD_JSON_PATH_EQUALS_ASSERTION" && !assertion) throw new TestRegistryError("Evolution assertion not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_NOT_FOUND", status: 409 });
       if (change.type === "STATUS_EXPECTATION") {
         if (assertion.type !== "STATUS") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });
+        if(scenario.category==='NEGATIVE'&&assertion.expectedStatusCodes?.every(s=>s>=400&&s<500)&&change.expectedStatusCodes.some(s=>s<400||s>=500))throw new TestRegistryError('Do not turn a negative rejection into success.',{code:'NEGATIVE_EXPECTATION_SUCCESS_REQUIRES_REVIEW',status:409});
         assertion.expectedStatusCodes = [...change.expectedStatusCodes];
       } else if (change.type === "CONTENT_TYPE_EXPECTATION") {
         if (assertion.type !== "CONTENT_TYPE") throw new TestRegistryError("Evolution assertion type mismatch.", { code: "TEST_REGISTRY_EVOLUTION_ASSERTION_TYPE_MISMATCH", status: 409 });

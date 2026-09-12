@@ -1,3 +1,4 @@
+import { negativeEffectivePath, assessNegativeExecution } from './negativeRequestStrategy.js';
 import { COVERAGE_ASSERTION_TYPES, validateCoverageEvaluation, assertionCoverageGaps, jsonTypeMatches } from './coverageAssertions.js';
 /** FIX-2.2. Confirm existing assertions; never synthesize a passing assertion.
  * Called with authoritative Results/Registry data. No request values leave this module.
@@ -17,6 +18,7 @@ export function confirmationPathBindings(source){
  const out=[],seen=new Set();const bindings=source.spec?.testData?.bindings||[];
  for(const [segmentIndex,segment] of String(source.spec?.target?.path||'').split('/').filter(Boolean).entries()){
   const m=/^\{([A-Za-z_][A-Za-z0-9_.-]*)\}$/.exec(segment);if(!m)continue;const selector=m[1];
+  if(source.spec?.negativeStrategy?.operation==='OMIT_PATH_SEGMENT'&&source.spec.negativeStrategy.selector===selector)continue;
   // Evidence v1 does not distinguish repeated placeholders. Do not infer their identity.
   if(seen.has(selector))reject('LEARNING_CONFIRMATION_REPEATED_PATH_UNSUPPORTED');seen.add(selector);
   if(own(source.spec.request?.pathParams,selector)||bindings.some(b=>b.target==='PATH_PARAM'&&b.selector===selector))continue;
@@ -27,7 +29,7 @@ export function confirmationPathBindings(source){
 }
 function sourceEligible(source){
  if(!source||source.baseline||source.generationClass==='OBSERVED_BASELINE')reject('LEARNING_CONFIRMATION_BASELINE_PROTECTED');
- if(source.learning)reject('LEARNING_CONFIRMATION_ALREADY_RECORDED');
+ if(source.learning&&source.learning.kind!=='NEGATIVE_REQUEST_REPAIR')reject('LEARNING_CONFIRMATION_ALREADY_RECORDED');
  if(!['REVIEW_REQUIRED','NEEDS_DATA'].includes(source.automation?.readiness))reject('LEARNING_CONFIRMATION_REVIEW_NOT_REQUIRED');
  const a=assessExploratoryLearning(source);if(!a.allowed)reject(a.reason);
  if(!['UNAUTHENTICATED','REQUIRED','NONE'].includes(source.spec?.auth?.requirement))reject('LEARNING_CONFIRMATION_AUTH_INTENT_UNSUPPORTED');
@@ -48,7 +50,9 @@ export async function buildLearningExecutionProof({resultSet:rs,scenario,sourceV
  const evidence=scenario.evidence,request=evidence?.request,http=scenario.http;
  if(evidence?.executionPurpose!=='LEARNING')reject('LEARNING_CONFIRMATION_PURPOSE_REQUIRED');
  if(scenario.outcome!=='PASSED'||http?.outcome!=='RESPONSE')reject('LEARNING_CONFIRMATION_RESULT_NOT_PASSED');
- if(http.method!==source.spec.target.method||!templateMatches(source.spec.target.path,http.path)||!request||request.method!==http.method||!templateMatches(source.spec.target.path,request.path))reject('LEARNING_CONFIRMATION_REQUEST_MISMATCH');
+ const negative=assessNegativeExecution(source,scenario);if(negative.required&&!negative.established)reject(negative.reason);
+ const effectivePath=negativeEffectivePath(source.spec.target.path,source.spec.negativeStrategy);
+ if(http.method!==source.spec.target.method||!templateMatches(effectivePath,http.path)||!request||request.method!==http.method||!templateMatches(effectivePath,request.path))reject('LEARNING_CONFIRMATION_REQUEST_MISMATCH');
  if(!Number.isInteger(http.statusCode)||http.statusCode<200||http.statusCode>=500||http.redirectCount!==0||http.errorCode)reject('LEARNING_CONFIRMATION_HTTP_UNUSABLE');
  const expected=source.spec.assertions||[],actual=scenario.assertions||[];
  if(!expected.length||expected.length!==actual.length||expected.length>100)reject('LEARNING_CONFIRMATION_ASSERTIONS_INCOMPLETE');
@@ -91,7 +95,7 @@ export async function buildLearningExecutionProof({resultSet:rs,scenario,sourceV
  const additions=confirmationPathBindings(source);
  const allBindings=[...(source.spec.testData?.bindings||[]),...additions];
  // Persist policies, not the FIXED values frozen in the runtime. Check every required path.
- for(const segment of source.spec.target.path.split('/')){
+ for(const segment of effectivePath.split('/')){
   const match=/^\{([^}]+)\}$/.exec(segment);if(!match)continue;
   const p=request.pathParams.find(v=>v.name===match[1]);
   if(!p||p.redacted||!['string','number'].includes(typeof p.value)||String(p.value)===''||(typeof p.value==='number'&&!Number.isFinite(p.value))||/\[REDACTED\]|\[TRUNCATED\]|\{[^}]*\}/.test(String(p.value)))reject('LEARNING_CONFIRMATION_PATH_EVIDENCE_MISSING');

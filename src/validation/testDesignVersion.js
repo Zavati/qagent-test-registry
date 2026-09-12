@@ -152,6 +152,7 @@ export function validateAppendVersionInput(input, env = {}) {
   const model = assertString(generation.model, "payload.specification.generation.model", { max: 160 });
   const counts = validateSummary(specification);
   for(const scenario of specification.scenarios){
+    if(scenario.spec?.negativeStrategy!=null)fail('Negative strategies require reviewed derivation.','specification.scenarios','NEGATIVE_REQUEST_REPAIR_APPROVAL_REQUIRED');
     for(const a of scenario.spec?.assertions||[])if(COVERAGE_ASSERTION_TYPES.has(a.type))try{validateCoverageAssertion(a);}catch(e){fail(e.message,'specification.scenarios',e.code);}
     try{validateObservedBaselineScenario(scenario,{organizationId,projectId,endpointId});}
     catch(error){throw new TestRegistryError(error.message,{code:error.code||'OBSERVED_BASELINE_CONTRACT_INVALID',status:409});}
