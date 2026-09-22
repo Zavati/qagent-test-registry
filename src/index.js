@@ -4,6 +4,7 @@ import {
   appendVersionRoute,
   derivedVersionRoute,
   humanRequestRepairRoute,
+  scenarioRequestEditRoute,
   exactVersionRoute,
   latestVersionRoute,
   runnerArtifactRoute,
@@ -149,6 +150,12 @@ export async function handleRequest(request, env = {}) {
     if (url.pathname === "/internal/v1/test-registry/test-designs/human-request-repairs") {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       const result = await humanRequestRepairRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
+
+    if (url.pathname === "/internal/v1/test-registry/test-designs/scenario-request-edits") {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      const result = await scenarioRequestEditRoute(request, env);
       return json(result.body, { status: result.status });
     }
 

@@ -98,6 +98,62 @@ function deleteBodyPath(body, selector) {
   delete cursor[parts.at(-1)];
 }
 
+function removeRequestLiteral(request, target, selector) {
+  if (!plain(request)) return;
+  if (target === 'BODY') return deleteBodyPath(request.body, selector);
+  if (target === 'QUERY' && plain(request.query)) delete request.query[selector];
+  if (target === 'PATH_PARAM' && plain(request.pathParams)) delete request.pathParams[selector];
+}
+
+function selectorKey(target, selector) { return `${target}:${selector}`; }
+function scenarioLocalBindingKey(scenarioId, target, selector) { return `SCENARIO:${scenarioId}:${target}:${selector}`; }
+function hasUsablePathBinding(scenario, selector) {
+  if (Object.prototype.hasOwnProperty.call(scenario?.spec?.request?.pathParams || {}, selector)) return true;
+  return (scenario?.spec?.testData?.bindings || []).some((binding) => binding?.target === 'PATH_PARAM' && binding?.selector === selector);
+}
+function pathPlaceholders(path) { return [...String(path || '').matchAll(/\{([A-Za-z_][A-Za-z0-9_.-]{0,119})\}/g)].map((m) => m[1]); }
+function isDataBlocker(text) {
+  const value=String(text||'');
+  return /Test Data:\s*configure FIXED|Valores de path params precisam ser fornecidos|formato do body .*massa de teste|dados? de teste.*(?:necess[aá]rio|seguro)|massa de teste/i.test(value);
+}
+function blockerTargetsSelector(text,target,selector) {
+  const value=String(text||'');
+  if (!/Test Data:\s*configure FIXED/i.test(value)) return false;
+  return value.includes(target) && value.includes(selector);
+}
+function reconcileScenarioAfterRequestEdit(scenario, changes) {
+  if (!scenario?.automation) return;
+  const before=Array.isArray(scenario.automation.blockers)?scenario.automation.blockers:[];
+  const resolved=new Set(changes.filter(c=>c.type!=='OMIT').map(c=>selectorKey(c.target,c.selector)));
+  let next=before.filter((blocker)=>{
+    for (const key of resolved) {
+      const [target,...rest]=key.split(':'); const selector=rest.join(':');
+      if (blockerTargetsSelector(blocker,target,selector)) return false;
+    }
+    return true;
+  });
+  const placeholders=pathPlaceholders(scenario?.spec?.target?.path);
+  if (placeholders.length && placeholders.every((selector)=>hasUsablePathBinding(scenario,selector))) {
+    next=next.filter((b)=>!/Valores de path params precisam ser fornecidos/i.test(String(b)));
+  }
+  if (!(next.some((b)=>/Test Data:\s*configure FIXED.*BODY/i.test(String(b))))) {
+    next=next.filter((b)=>!/formato do body .*massa de teste/i.test(String(b)));
+  }
+  scenario.automation.blockers=[...new Set(next)];
+  if (scenario.automation.readiness==='NEEDS_DATA') {
+    if (!next.length) scenario.automation.readiness='READY';
+    else if (!next.some(isDataBlocker)) scenario.automation.readiness='REVIEW_REQUIRED';
+  }
+  if (scenario.automation.readiness==='READY' && scenario.automation.evolutionState==='BLOCKED') scenario.automation.evolutionState='LEARNING';
+}
+
+function requestEditCounts(specification) {
+  const byReadiness={}; let readyCount=0,reviewRequiredCount=0;
+  for(const scenario of specification.scenarios||[]){const r=scenario?.automation?.readiness||'REVIEW_REQUIRED';byReadiness[r]=(byReadiness[r]||0)+1;if(r==='READY')readyCount+=1;if(r==='REVIEW_REQUIRED')reviewRequiredCount+=1;}
+  specification.summary={...(specification.summary||{}),scenarioCount:(specification.scenarios||[]).length,readyCount,byReadiness};
+  return {scenarioCount:(specification.scenarios||[]).length,readyCount,reviewRequiredCount};
+}
+
 function isMissingExecutionProjectionTableError(error) {
   return /no such table:\s*test_design_execution_inventory/i.test(String(error?.message || error || ""));
 }
@@ -536,6 +592,108 @@ export function createTestDesignRepository(db, {
     return { created: true, idempotentReplay: false, version: created };
   }
 
+  async function appendScenarioRequestEditVersion(input) {
+    const derivationKey = `SCENARIO_REQUEST_EDIT:${input.edit.editId}`;
+    const replay = await getVersionByDerivationKey(derivationKey);
+    if (replay) return { created: false, idempotentReplay: true, version: replay };
+
+    const source = await getVersionById({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      testDesignVersionId: input.sourceTestDesignVersionId,
+    });
+    if (!source || source.endpointId !== input.endpointId) throw new TestRegistryError('Source Test Design version not found.', { code: 'TEST_DESIGN_VERSION_NOT_FOUND', status: 404 });
+    const root = await getRootByScope(source);
+    if (!root || root.latestVersionId !== source.id) throw new TestRegistryError('Source Test Design version is stale.', { code: 'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_SOURCE_STALE', status: 409, details: { sourceVersionId: source.id, latestVersionId: root?.latestVersionId || null } });
+    try { assertNoProtectedBaselineChanges(source.specification,[input.edit.scenarioId]); }
+    catch(error){ throw new TestRegistryError(error.message,{code:error.code,status:409}); }
+
+    const specification=structuredClone(source.specification);
+    const scenario=(specification.scenarios||[]).find((item)=>item?.scenarioId===input.edit.scenarioId);
+    if(!scenario)throw new TestRegistryError('Scenario not found in source version.',{code:'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_SCENARIO_NOT_FOUND',status:404});
+    if(!scenario.spec)throw new TestRegistryError('Scenario spec is unavailable.',{code:'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_SPEC_MISSING',status:409});
+    if(!plain(scenario.spec.request))scenario.spec.request={pathParams:{},query:{},headers:{}};
+    if(!scenario.spec.testData)scenario.spec.testData={contractVersion:'qagent.test-data-bindings.v1',bindings:[]};
+    if(!Array.isArray(scenario.spec.testData.bindings))scenario.spec.testData.bindings=[];
+    const bindings=scenario.spec.testData.bindings;
+
+    const replaceBinding=(change,next)=>{
+      const index=bindings.findIndex((binding)=>binding?.target===change.target&&binding?.selector===change.selector);
+      if(index>=0)bindings[index]=next;else bindings.push(next);
+    };
+    for(const change of input.changes){
+      removeRequestLiteral(scenario.spec.request,change.target,change.selector);
+      if(change.type==='OMIT'){
+        for(let i=bindings.length-1;i>=0;i-=1)if(bindings[i]?.target===change.target&&bindings[i]?.selector===change.selector)bindings.splice(i,1);
+        continue;
+      }
+      const provenance={origin:'USER_DEFINED'};
+      if(change.type==='SET_FIXED_LOCAL'){
+        replaceBinding(change,{target:change.target,selector:change.selector,source:'FIXED',valueType:change.valueType,bindingKey:change.bindingKey||scenarioLocalBindingKey(scenario.scenarioId,change.target,change.selector),fixedValue:structuredClone(change.value),provenance});
+        continue;
+      }
+      if(change.type==='SET_GENERATED'){
+        replaceBinding(change,{target:change.target,selector:change.selector,source:'GENERATED',valueType:change.valueType,generator:structuredClone(change.generator),...(change.sharedBindingId?{sharedBindingId:change.sharedBindingId}:{}),provenance});
+        continue;
+      }
+      if(change.type==='SET_OBSERVED'){
+        replaceBinding(change,{target:change.target,selector:change.selector,source:'OBSERVED',valueType:change.valueType,bindingKey:change.bindingKey,provenance});
+        continue;
+      }
+      if(change.type==='USE_SHARED'){
+        const next={target:change.target,selector:change.selector,source:change.sourceType,valueType:change.valueType,sharedBindingId:change.sharedBindingId,provenance};
+        if(change.sourceType==='GENERATED')next.generator=structuredClone(change.generator);
+        else next.bindingKey=change.bindingKey;
+        replaceBinding(change,next);
+        continue;
+      }
+      throw new TestRegistryError('Unsupported scenario request edit.',{code:'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_CHANGE_UNSUPPORTED',status:400});
+    }
+    reconcileScenarioAfterRequestEdit(scenario,input.changes);
+    const nextVersion=root.latestVersion+1, versionId=versionIdFactory(), createdAt=now().toISOString();
+    // Any learning marker carried by the parent described the previous request shape.
+    // The immutable parent keeps that history; the edited version gets explicit request-management provenance instead.
+    if (scenario.learning) delete scenario.learning;
+    scenario.requestManagement={
+      contractVersion:'qagent.scenario-request-management.v1',
+      phase:'PENDING_VERIFICATION',
+      editId:input.edit.editId,
+      sourceTestDesignVersionId:source.id,
+      editedByUserId:input.edit.approvedByUserId,
+      editedAt:createdAt,
+      reason:input.edit.reason,
+      changedSelectors:input.changes.map((change)=>({operation:change.type,target:change.target,selector:change.selector})),
+    };
+    const counts=requestEditCounts(specification);
+    const origin={
+      type:'SCENARIO_REQUEST_EDIT',editId:input.edit.editId,scenarioId:input.edit.scenarioId,
+      sourceTestDesignVersionId:source.id,approvedByUserId:input.edit.approvedByUserId,reason:input.edit.reason,
+      changes:input.changes.map((change)=>({type:change.type,target:change.target,selector:change.selector,...(change.type==='USE_SHARED'?{sharedBindingId:change.sharedBindingId,sourceType:change.sourceType}:{})})),
+    };
+    const specificationJson=JSON.stringify(specification);
+    const insert=db.prepare(`INSERT INTO test_design_versions (
+      id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
+      contract_version, specification_version, provider, model, prompt_version, repair_prompt_version, guard_version,
+      scenario_count, ready_count, review_required_count, specification_json, generation_metadata_json, safe_diagnostics_json,
+      derivation_key, version_origin_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(versionId,source.testDesignId,source.organizationId,source.projectId,source.endpointId,nextVersion,
+        `scenario_request_edit_${input.edit.editId}`,source.contextFingerprint,source.contractVersion,source.specificationVersion,
+        source.provider,source.model,source.promptVersion,source.repairPromptVersion,source.guardVersion,
+        counts.scenarioCount,counts.readyCount,counts.reviewRequiredCount,specificationJson,JSON.stringify(source.generationMetadata),JSON.stringify(source.safeDiagnostics),derivationKey,JSON.stringify(origin),createdAt);
+    const projection=buildTestDesignExecutionProjection({specificationJson,testDesignVersionId:versionId,testDesignId:source.testDesignId,organizationId:source.organizationId,projectId:source.projectId,endpointId:source.endpointId,testDesignVersion:nextVersion,createdAt});
+    const updateRoot=db.prepare(`UPDATE test_designs SET latest_version = ?, latest_version_id = ?, updated_at = ? WHERE id = ? AND latest_version_id = ?`).bind(nextVersion,versionId,createdAt,source.testDesignId,source.id);
+    try{await db.batch([insert,projectionInsertStatement(db,projection),updateRoot]);}
+    catch(error){
+      if(isUniqueConstraintError(error)){const again=await getVersionByDerivationKey(derivationKey);if(again)return {created:false,idempotentReplay:true,version:again};}
+      const current=await getRootByScope(source);if(!current||current.latestVersionId!==source.id)throw new TestRegistryError('Source Test Design version changed during scenario request edit.',{code:'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_SOURCE_STALE',status:409});
+      throw error;
+    }
+    const created=await getVersionById({organizationId:source.organizationId,projectId:source.projectId,testDesignVersionId:versionId});
+    if(!created)throw new TestRegistryError('Scenario request edited Test Design version could not be verified.',{code:'TEST_REGISTRY_SCENARIO_REQUEST_EDIT_VERIFY_FAILED',status:500,retryable:true});
+    return {created:true,idempotentReplay:false,version:created};
+  }
+
   async function appendVersion(input) {
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
@@ -745,6 +903,7 @@ export function createTestDesignRepository(db, {
     getVersionByDerivationKey,
     appendDerivedVersion,
     appendHumanRequestRepairVersion,
+    appendScenarioRequestEditVersion,
   };
 }
 
