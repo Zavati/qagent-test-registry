@@ -694,6 +694,69 @@ export function createTestDesignRepository(db, {
     return {created:true,idempotentReplay:false,version:created};
   }
 
+  async function appendScenarioLifecycleVersion(input) {
+    const op=input.operation;
+    const derivationKey=`SCENARIO_LIFECYCLE:${op.operationId}`;
+    const replay=await getVersionByDerivationKey(derivationKey);
+    if(replay)return {created:false,idempotentReplay:true,version:replay};
+    const source=await getVersionById({organizationId:input.organizationId,projectId:input.projectId,testDesignVersionId:input.sourceTestDesignVersionId});
+    if(!source||source.endpointId!==input.endpointId)throw new TestRegistryError('Source Test Design version not found.',{code:'TEST_DESIGN_VERSION_NOT_FOUND',status:404});
+    const root=await getRootByScope(source);
+    if(!root||root.latestVersionId!==source.id)throw new TestRegistryError('Source Test Design version is stale.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_SOURCE_STALE',status:409,details:{sourceVersionId:source.id,latestVersionId:root?.latestVersionId||null}});
+    const specification=structuredClone(source.specification);
+    const scenarios=Array.isArray(specification.scenarios)?specification.scenarios:[];
+    const index=scenarios.findIndex(item=>item?.scenarioId===op.scenarioId);
+    if(index<0)throw new TestRegistryError('Scenario not found in source version.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_SCENARIO_NOT_FOUND',status:404});
+    const sourceScenario=scenarios[index];
+    if(sourceScenario?.generationClass==='OBSERVED_BASELINE')throw new TestRegistryError('Observed baseline lifecycle must use baseline review.',{code:'OBSERVED_BASELINE_REBASELINE_REQUIRED',status:409});
+    if(op.action==='CLONE'){
+      if(scenarios.some(item=>item?.scenarioId===op.newScenarioId))throw new TestRegistryError('Clone scenarioId already exists.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_ID_CONFLICT',status:409});
+      const clone=structuredClone(sourceScenario);
+      clone.scenarioId=op.newScenarioId;
+      clone.title=op.title||`${sourceScenario.title||'Cenário'} · cópia`;
+      if(op.objective)clone.objective=op.objective;
+      if(clone.learning)delete clone.learning;
+      if(clone.requestManagement)delete clone.requestManagement;
+      const cloneBindings=clone?.spec?.testData?.bindings;
+      if(Array.isArray(cloneBindings)){for(const binding of cloneBindings){if(binding?.source==='FIXED'&&binding?.provenance?.origin==='USER_DEFINED'&&typeof binding.bindingKey==='string'&&binding.bindingKey.startsWith(`SCENARIO:${op.scenarioId}:`))binding.bindingKey=`SCENARIO:${op.newScenarioId}:${binding.bindingKey.slice(`SCENARIO:${op.scenarioId}:`.length)}`;}}
+      if(clone?.automation?.evolutionState==='LEARNING')clone.automation.evolutionState=clone.automation.readiness==='READY'?'STABLE':'BLOCKED';
+      clone.scenarioLifecycle={contractVersion:'qagent.scenario-lifecycle.v1',kind:'SCENARIO_CLONE',sourceScenarioId:op.scenarioId,sourceTestDesignVersionId:source.id,operationId:op.operationId,phase:'DERIVED',derivedByUserId:op.approvedByUserId,reason:op.reason};
+      scenarios.splice(index+1,0,clone);
+    }else if(op.action==='RENAME'){
+      if(sourceScenario?.learning?.phase==='PENDING_VERIFICATION'||sourceScenario?.requestManagement?.phase==='PENDING_VERIFICATION')throw new TestRegistryError('Scenario has a pending verification; finish or remove it before renaming.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_PENDING_VERIFICATION',status:409});
+      sourceScenario.title=op.title;
+      sourceScenario.scenarioLifecycle={contractVersion:'qagent.scenario-lifecycle.v1',kind:'SCENARIO_METADATA_EDIT',sourceScenarioId:op.scenarioId,sourceTestDesignVersionId:source.id,operationId:op.operationId,phase:'APPLIED',derivedByUserId:op.approvedByUserId,reason:op.reason};
+    }else if(op.action==='REMOVE'){
+      if(scenarios.length<=1)throw new TestRegistryError('Cannot remove the last scenario from a Test Design.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_LAST_SCENARIO',status:409});
+      scenarios.splice(index,1);
+    }else throw new TestRegistryError('Unsupported lifecycle action.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_ACTION_UNSUPPORTED',status:400});
+    specification.scenarios=scenarios;
+    if(specification.summary&&typeof specification.summary==='object'){
+      const ready=scenarios.filter(x=>x?.automation?.readiness==='READY').length;
+      const byReadiness={};const byCategory={};const byGrounding={};
+      for(const sc of scenarios){const r=sc?.automation?.readiness||'UNKNOWN';byReadiness[r]=(byReadiness[r]||0)+1;const c=sc?.category||'UNKNOWN';byCategory[c]=(byCategory[c]||0)+1;const g=sc?.grounding?.level||'UNKNOWN';byGrounding[g]=(byGrounding[g]||0)+1;}
+      specification.summary={...specification.summary,scenarioCount:scenarios.length,readyCount:ready,byReadiness,byCategory,byGrounding};
+    }
+    const nextVersion=root.latestVersion+1,versionId=versionIdFactory(),createdAt=now().toISOString();
+    const counts={scenarioCount:scenarios.length,readyCount:scenarios.filter(x=>x?.automation?.readiness==='READY').length,reviewRequiredCount:scenarios.filter(x=>x?.automation?.readiness==='REVIEW_REQUIRED').length};
+    const origin={type:'SCENARIO_LIFECYCLE',action:op.action,operationId:op.operationId,scenarioId:op.scenarioId,...(op.newScenarioId?{newScenarioId:op.newScenarioId}:{}),sourceTestDesignVersionId:source.id,approvedByUserId:op.approvedByUserId,reason:op.reason};
+    const specificationJson=JSON.stringify(specification);
+    const insert=db.prepare(`INSERT INTO test_design_versions (
+      id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
+      contract_version, specification_version, provider, model, prompt_version, repair_prompt_version, guard_version,
+      scenario_count, ready_count, review_required_count, specification_json, generation_metadata_json, safe_diagnostics_json,
+      derivation_key, version_origin_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(versionId,source.testDesignId,source.organizationId,source.projectId,source.endpointId,nextVersion,`scenario_lifecycle_${op.operationId}`,source.contextFingerprint,source.contractVersion,source.specificationVersion,source.provider,source.model,source.promptVersion,source.repairPromptVersion,source.guardVersion,counts.scenarioCount,counts.readyCount,counts.reviewRequiredCount,specificationJson,JSON.stringify(source.generationMetadata),JSON.stringify(source.safeDiagnostics),derivationKey,JSON.stringify(origin),createdAt);
+    const projection=buildTestDesignExecutionProjection({specificationJson,testDesignVersionId:versionId,testDesignId:source.testDesignId,organizationId:source.organizationId,projectId:source.projectId,endpointId:source.endpointId,testDesignVersion:nextVersion,createdAt});
+    const updateRoot=db.prepare(`UPDATE test_designs SET latest_version = ?, latest_version_id = ?, updated_at = ? WHERE id = ? AND latest_version_id = ?`).bind(nextVersion,versionId,createdAt,source.testDesignId,source.id);
+    try{await db.batch([insert,projectionInsertStatement(db,projection),updateRoot]);}
+    catch(error){if(isUniqueConstraintError(error)){const again=await getVersionByDerivationKey(derivationKey);if(again)return {created:false,idempotentReplay:true,version:again};}throw error;}
+    const created=await getVersionById({organizationId:source.organizationId,projectId:source.projectId,testDesignVersionId:versionId});
+    if(!created)throw new TestRegistryError('Scenario lifecycle Test Design version could not be verified.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_VERIFY_FAILED',status:500,retryable:true});
+    return {created:true,idempotentReplay:false,version:created};
+  }
+
   async function appendVersion(input) {
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
@@ -904,6 +967,7 @@ export function createTestDesignRepository(db, {
     appendDerivedVersion,
     appendHumanRequestRepairVersion,
     appendScenarioRequestEditVersion,
+    appendScenarioLifecycleVersion,
   };
 }
 
