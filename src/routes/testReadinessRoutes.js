@@ -1,3 +1,4 @@
+import { scenarioReadinessV2Enabled } from '../readiness/scenarioReadinessV2.js';
 import { createTestReadinessRepository } from '../repository/testReadinessRepository.js';
 import { parseTestReadinessQuery, isReadinessId, validateTestReadinessEnvelope } from '../domain/testReadinessContracts.js';
 import { validateInternalTenantHeaders } from '../validation/testDesignVersion.js';
@@ -11,7 +12,7 @@ async function read(request, env, { projectId, endpointId = null }) {
   const start = Date.now();
   try {
     const query = parseTestReadinessQuery(new URL(request.url).searchParams, { detail: Boolean(endpointId) });
-    const repo = createTestReadinessRepository(env.TEST_REGISTRY_DB);
+    const repo = createTestReadinessRepository(env.TEST_REGISTRY_DB, { readinessV2Enabled: scenarioReadinessV2Enabled(env), log: typeof env.log === 'function' ? env.log : (...args) => console.log(...args) });
     const input = { organizationId: scope.organizationId, projectId, endpointId, query };
     const data = endpointId ? await repo.scenarios(input) : await repo.list(input);
     validateTestReadinessEnvelope({status:'ok',data}, {...input, testDesignVersionId:query.testDesignVersionId}, {detail:Boolean(endpointId),query});

@@ -1,3 +1,4 @@
+import { validateReadinessAttachments } from '../readiness/readinessDerivation.js';
 import { COVERAGE_ASSERTION_TYPES, validateCoverageAssertion } from '../coverageAssertions.js';
 import { validateObservedBaselineScenario, observedBaselineReady } from '../baselineContract.js';
 import { TestRegistryError } from "../domain/errors.js";
@@ -161,6 +162,8 @@ export function validateAppendVersionInput(input, env = {}) {
       if(scenario.automation?.readiness==='READY'&&!observedBaselineReady(scenario.baseline))fail('Incomplete or expired baseline cannot be READY.','specification.scenarios','OBSERVED_BASELINE_NOT_READY');
     } else if(scenario.generationClass!=null&&scenario.generationClass!=='AI_EXPLORATORY')fail('Unknown generation origin.','specification.scenarios');
   }
+
+  validateReadinessAttachments(specification, { generation: true });
 
   const metadata = payload.metadata == null ? {} : assertPlainObject(payload.metadata, "payload.metadata");
   assertKnownKeys(metadata, METADATA_KEYS, "payload.metadata");

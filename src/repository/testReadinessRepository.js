@@ -1,3 +1,5 @@
+import { readScenarioReadinessV2 } from '../readiness/legacyReadinessAdapter.js';
+import { validateScenarioReadinessAttachment } from '../readiness/scenarioReadinessV2.js';
 import {
   READINESS_CONTRACT, READINESS_DETAIL_CONTRACT, READINESS_PROJECTION_VERSION,
   READINESS_STATES, GENERATION_CLASSES, BASELINE_BUCKETS, readinessError, readinessHash,
@@ -5,6 +7,69 @@ import {
   isReadinessId, safeReasonCodes, COVERAGE_REASONS, READINESS_BLOCKERS,
 } from '../domain/testReadinessContracts.js';
 import { SUITE_EXECUTION_ELIGIBILITY_POLICY_VERSION } from '../domain/executionEligibility.js';
+
+
+// Used only on the bounded, pinned scenario detail page while v2 is enabled.
+// Presence markers allow conservative structural checks without selecting credentials,
+// request bodies, literal assertion values or generator configuration into the worker.
+const LEGACY_READINESS_FACTS_SQL = `json_object(
+ 'negativeShapeInvalid',CASE WHEN json_type(j.value,'$.spec.negativeStrategy') IS NOT NULL AND json_type(j.value,'$.spec.negativeStrategy')<>'null' AND (
+   json_type(j.value,'$.spec.negativeStrategy')<>'object' OR EXISTS (SELECT 1 FROM json_each(j.value,'$.spec.negativeStrategy') nk
+   WHERE nk.key NOT IN ('contractVersion','operation','target','selector','sourcePath','basis') AND nk.key<>CASE WHEN json_extract(j.value,'$.spec.negativeStrategy.operation')='OMIT_PATH_SEGMENT' THEN 'segmentIndex' ELSE 'probeValue' END)) THEN 1 ELSE 0 END,
+ 'scenarioId',json_extract(j.value,'$.scenarioId'),
+ 'title',json_extract(j.value,'$.title'),'objective',json_extract(j.value,'$.objective'),
+ 'category',json_extract(j.value,'$.category'),'generationClass',json_extract(j.value,'$.generationClass'),
+ 'grounding',json_object('level',json_extract(j.value,'$.grounding.level'),'evidenceRefs',json_extract(j.value,'$.grounding.evidenceRefs')),
+ 'automation',json_object('readiness',json_extract(j.value,'$.automation.readiness'),'blockers',json_extract(j.value,'$.automation.blockers')),
+ 'learning',json_object('phase',json_extract(j.value,'$.learning.phase')),
+ 'requestManagement',json_object('phase',json_extract(j.value,'$.requestManagement.phase')),
+ 'scenarioLifecycle',json_object('kind',json_extract(j.value,'$.scenarioLifecycle.kind')),
+ 'baseline',CASE WHEN json_type(j.value,'$.baseline')='object' THEN json_object(
+   'baselineId',json_extract(j.value,'$.baseline.baselineId'),'source',json_object('evidenceId',json_extract(j.value,'$.baseline.source.evidenceId')),
+   'expiresAt',json_extract(j.value,'$.baseline.expiresAt'),'requestCoverage',json_object('status',json_extract(j.value,'$.baseline.requestCoverage.status')),
+   'responseCoverage',json_object('status',json_extract(j.value,'$.baseline.responseCoverage.status')),'selfCheck',json_extract(j.value,'$.baseline.selfCheck'),
+   'enrichment',json_object('selfCheck',json_extract(j.value,'$.baseline.enrichment.selfCheck'))) ELSE NULL END,
+ 'spec',json_object(
+   'target',json_object('method',json_extract(j.value,'$.spec.target.method'),'path',json_extract(j.value,'$.spec.target.path'),'apiServiceKey',json_extract(j.value,'$.spec.target.apiServiceKey')),
+   'auth',json_object('requirement',json_extract(j.value,'$.spec.auth.requirement'),'authProfileRef',CASE WHEN length(json_extract(j.value,'$.spec.auth.authProfileRef'))>0 THEN '__configured__' ELSE NULL END),
+   'request',json_object(
+     'headers',CASE WHEN EXISTS (SELECT 1 FROM json_tree(j.value,'$.spec.request') t WHERE t.type NOT IN ('object','array','null') AND
+       (lower(t.key) LIKE '%password%' OR lower(t.key) LIKE '%passwd%' OR lower(t.key) LIKE '%secret%' OR lower(t.key) LIKE '%token%' OR lower(t.key) LIKE '%authorization%' OR lower(t.key) LIKE '%cookie%' OR lower(t.key) LIKE '%credential%' OR lower(t.key) LIKE '%api%key%' OR lower(t.key) LIKE '%private%key%')) THEN json_object('authorization','__presence_only__') ELSE json('{}') END,
+     'pathParams',(SELECT json_group_object(p.key,CASE WHEN p.type IN ('integer','real','true','false') OR (p.type='text' AND length(trim(p.value))>0 AND p.value NOT LIKE '%{%'
+       AND p.value NOT LIKE '%}%' AND p.value NOT LIKE '%REDACTED%' AND p.value NOT LIKE '%TRUNCATED%') THEN '__configured__' ELSE NULL END) FROM json_each(j.value,'$.spec.request.pathParams') p),
+     'query',(SELECT json_group_object(q.key,CASE WHEN q.value='qagent_probe_'||q.key||'_unobserved_v1' THEN q.value WHEN q.type IN ('text','integer','real','true','false') THEN '__configured__' ELSE NULL END) FROM json_each(j.value,'$.spec.request.query') q)),
+   'testData',json_object('bindings',(SELECT json_group_array(json_object('target',json_extract(b.value,'$.target'),'selector',json_extract(b.value,'$.selector'),'source',json_extract(b.value,'$.source'),
+     'bindingKey',CASE WHEN length(json_extract(b.value,'$.bindingKey'))>0 THEN '__configured__' ELSE NULL END,'generator',json_object('kind',json_extract(b.value,'$.generator.kind')))) FROM json_each(j.value,'$.spec.testData.bindings') b)),
+   'assertions',(SELECT json_group_array(json_object('type',json_extract(a.value,'$.type'),'path',json_extract(a.value,'$.path'),'expectedType',json_extract(a.value,'$.expectedType'),
+     'expectedStatusCodes',CASE WHEN json_extract(a.value,'$.type')='STATUS' THEN json_extract(a.value,'$.expectedStatusCodes') ELSE NULL END,
+     'expected',CASE WHEN json_extract(a.value,'$.type')='STATUS' AND json_type(a.value,'$.expected')='integer' THEN json_extract(a.value,'$.expected') ELSE NULL END,
+     'target',json_extract(a.value,'$.target'),'selector',json_extract(a.value,'$.selector'))) FROM json_each(j.value,'$.spec.assertions') a),
+   'negativeStrategy',CASE WHEN json_type(j.value,'$.spec.negativeStrategy')='object' THEN json_object(
+     'contractVersion',json_extract(j.value,'$.spec.negativeStrategy.contractVersion'),'operation',json_extract(j.value,'$.spec.negativeStrategy.operation'),
+     'target',json_extract(j.value,'$.spec.negativeStrategy.target'),'selector',json_extract(j.value,'$.spec.negativeStrategy.selector'),
+     'sourcePath',json_extract(j.value,'$.spec.negativeStrategy.sourcePath'),'basis',json_extract(j.value,'$.spec.negativeStrategy.basis'),
+     'segmentIndex',json_extract(j.value,'$.spec.negativeStrategy.segmentIndex'),
+     'probeValue',CASE WHEN json_extract(j.value,'$.spec.negativeStrategy.probeValue')='qagent_probe_'||json_extract(j.value,'$.spec.negativeStrategy.selector')||'_unobserved_v1' THEN json_extract(j.value,'$.spec.negativeStrategy.probeValue') ELSE '__unmodeled__' END) ELSE NULL END
+ ))`;
+function projectReadinessMetadata(s, now, derivedVersion = false) {
+  try {
+    const scenario = s.readinessFacts;
+    if (!scenario || typeof scenario !== 'object') throw metadataInvalid();
+    // Restore the closed negative-strategy shape without transferring arbitrary probe values.
+    const strategy = scenario.spec?.negativeStrategy;
+    if (strategy?.operation === 'QUERY_VALUE_PROBE') {
+      delete strategy.segmentIndex;
+    } else if (strategy?.operation === 'OMIT_PATH_SEGMENT') delete strategy.probeValue;
+    if (!strategy) delete scenario.spec.negativeStrategy;
+    if (scenario.negativeShapeInvalid) scenario.spec.negativeStrategy = { invalidLegacyDeclaration: true };
+    delete scenario.negativeShapeInvalid;
+    if (s.hasReadinessV2) {
+      scenario.readinessV2 = s.nativeReadinessV2;
+      validateScenarioReadinessAttachment(scenario);
+    }
+    return readScenarioReadinessV2(scenario, { nowMs: Date.parse(now), derivedVersion });
+  } catch { throw metadataInvalid(); }
+}
 
 // All predicates are evaluated in the Registry DB, before grouping and LIMIT.
 // CASE guards keep corrupt JSON from becoming a successful empty result.
@@ -149,7 +214,7 @@ function summaryFor(row, roots, buckets) {
 }
 function safeMethod(value) { return typeof value === 'string' && /^[A-Z][A-Z0-9_-]{0,15}$/.test(value) ? value : null; }
 
-export function createTestReadinessRepository(db) {
+export function createTestReadinessRepository(db, { readinessV2Enabled = false, log = null } = {}) {
   if (!db || typeof db.prepare !== 'function' || typeof db.batch !== 'function') throw readinessError('TEST_READINESS_READ_UNAVAILABLE','Test Registry database binding indisponível.',503);
 
   async function list({organizationId,projectId,query,now = new Date().toISOString()}) {
@@ -214,6 +279,7 @@ export function createTestReadinessRepository(db) {
     const decoded=await decodeReadinessCursor(cursor,context);
     // Pinned version lookup. Projection fields are extracted in SQL; request/assertion values never leave the DB.
     const querySql=`SELECT v.id, v.test_design_id,v.endpoint_id,v.version,v.created_at,d.latest_version_id,
+       CASE WHEN json_valid(v.version_origin_json) THEN CASE WHEN json_extract(v.version_origin_json,'$.type') IN ('RESULT_EVOLUTION','HUMAN_REQUEST_REPAIR','SCENARIO_REQUEST_EDIT') THEN 1 ELSE 0 END ELSE 0 END AS readiness_derived_version,
        CASE WHEN json_valid(v.specification_json) THEN json_extract(v.specification_json,'$.title') END AS title,
        CASE WHEN json_valid(v.specification_json) THEN json_extract(v.specification_json,'$.scenarios[0].spec.target.method') END AS method,
        CASE WHEN json_valid(v.specification_json) THEN json_extract(v.specification_json,'$.scenarios[0].spec.target.path') END AS path,
@@ -231,6 +297,7 @@ export function createTestReadinessRepository(db) {
           'requestCoverage',json_extract(j.value,'$.baseline.requestCoverage.status'),'responseCoverage',json_extract(j.value,'$.baseline.responseCoverage.status'),
           'requestReasons',json_extract(j.value,'$.baseline.requestCoverage.reasons'),'responseReasons',json_extract(j.value,'$.baseline.responseCoverage.reasons'),
           'selfCheck',json_extract(j.value,'$.baseline.selfCheck')
+          ${readinessV2Enabled ? `, 'hasReadinessV2',json_type(j.value,'$.readinessV2') IS NOT NULL, 'nativeReadinessV2',json_extract(j.value,'$.readinessV2'), 'readinessFacts',${LEGACY_READINESS_FACTS_SQL}` : ''}
        )) FROM json_each(v.specification_json,'$.scenarios') j) END AS metadata_json
       FROM test_design_versions v JOIN test_designs d ON d.id=v.test_design_id AND d.organization_id=v.organization_id AND d.project_id=v.project_id AND d.endpoint_id=v.endpoint_id
       WHERE v.organization_id=? AND v.project_id=? AND v.endpoint_id=? AND v.id=? AND d.status='ACTIVE'`;
@@ -252,7 +319,12 @@ export function createTestReadinessRepository(db) {
       const baseline=s.generationClass==='OBSERVED_BASELINE'?Object.fromEntries(['baselineId','environmentId','sourceEventId','sourceEvidenceId','observationSessionId','observedAt','expiresAt','schemaVersionId','schemaHash','comparisonMode','requestCoverage','responseCoverage','selfCheck'].map(k=>[k,s[k]??null])):null;
       return {scenarioId:s.scenarioId,title:safeReadinessText(s.title),generationClass:s.generationClass,readiness:s.readiness,baselineGap:baselineGapOf(s),baseline,
         blockers,requestReasons,responseReasons,diagnosticsOmitted,detailAvailable:blockers.length+requestReasons.length+responseReasons.length>0,
-        sourceExpired:!!s.expiresAt&&Date.parse(s.expiresAt)<=Date.parse(now),navigationAction:'OPEN_TEST_DESIGN'};
+        sourceExpired:!!s.expiresAt&&Date.parse(s.expiresAt)<=Date.parse(now),navigationAction:'OPEN_TEST_DESIGN',
+        ...(readinessV2Enabled ? { readinessV2: projectReadinessMetadata(s, now, row.readiness_derived_version === 1) } : {})};
+    });
+    if (readinessV2Enabled && typeof log === 'function') log('scenario_readiness_v2_legacy_projected', {
+      scenarioCount: items.length, legacyCount: items.filter(s => s.readinessV2?.basis === 'LEGACY_PROJECTION').length,
+      nativeCount: items.filter(s => s.readinessV2?.basis === 'NATIVE_V2').length,
     });
     const hasMore=visible.length>limit;
     return {contractVersion:READINESS_DETAIL_CONTRACT,organizationId,projectId,endpointId,testDesignId:row.test_design_id,testDesignVersionId,testDesignVersion:row.version,

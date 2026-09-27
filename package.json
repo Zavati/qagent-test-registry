@@ -42,7 +42,8 @@
     "test:f08-1-6-fix2-4": "node --test test/negative-request-08.1.6-fix2-4.test.mjs",
     "check:08.1.6-fix2-4": "npm run check:08.1.6-fix2-3 && npm run test:f08-1-6-fix2-4",
     "test:f08-1-6-fix3": "node --test test/scenario-request-edit-08.1.6-fix3.test.mjs",
-    "check:08.1.6-fix3": "npm run check:08.1.6-fix2-4 && npm run test:f08-1-6-fix3"
+    "check:08.1.6-fix3": "npm run check:08.1.6-fix2-4 && npm run test:f08-1-6-fix3",
+    "test:f08-1-7-a": "node --test test/structured-readiness-08.1.7-a.test.mjs test/structured-readiness-integration-08.1.7-a.test.mjs"
   },
   "engines": {
     "node": ">=24"

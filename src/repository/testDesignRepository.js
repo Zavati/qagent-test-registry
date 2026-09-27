@@ -1,3 +1,4 @@
+import { invalidateDerivedReadiness, validateReadinessAttachments } from '../readiness/readinessDerivation.js';
 import { NEGATIVE_REPAIR_CHANGE, negativePreparationGate } from '../negativeRequestStrategy.js';
 import { applyNegativeRepairToScenario } from '../negativeRequestRepair.js';
 import { COVERAGE_CHANGE, applyCoverageToScenario } from '../learningCoverage.js';
@@ -441,6 +442,8 @@ export function createTestDesignRepository(db, {
       approvalReason: input.derivation.approvalReason || null,
       ...(input.derivation.proposals?{proposals:input.derivation.proposals}:{}),
     };
+    invalidateDerivedReadiness(specification, input.changes.map(change => change.scenarioId));
+    validateReadinessAttachments(specification);
     const specificationJson = JSON.stringify(specification);
     const insert = db.prepare(
       `INSERT INTO test_design_versions (
@@ -555,6 +558,8 @@ export function createTestDesignRepository(db, {
       reason: input.repair.reason,
       repairedSelectors: input.changes.map((change) => change.selector),
     };
+    invalidateDerivedReadiness(specification, input.changes.map(change => change.scenarioId));
+    validateReadinessAttachments(specification);
     const specificationJson = JSON.stringify(specification);
     const insert = db.prepare(
       `INSERT INTO test_design_versions (
@@ -664,12 +669,14 @@ export function createTestDesignRepository(db, {
       reason:input.edit.reason,
       changedSelectors:input.changes.map((change)=>({operation:change.type,target:change.target,selector:change.selector})),
     };
+    invalidateDerivedReadiness(specification, [scenario.scenarioId]);
     const counts=requestEditCounts(specification);
     const origin={
       type:'SCENARIO_REQUEST_EDIT',editId:input.edit.editId,scenarioId:input.edit.scenarioId,
       sourceTestDesignVersionId:source.id,approvedByUserId:input.edit.approvedByUserId,reason:input.edit.reason,
       changes:input.changes.map((change)=>({type:change.type,target:change.target,selector:change.selector,...(change.type==='USE_SHARED'?{sharedBindingId:change.sharedBindingId,sourceType:change.sourceType}:{})})),
     };
+    validateReadinessAttachments(specification);
     const specificationJson=JSON.stringify(specification);
     const insert=db.prepare(`INSERT INTO test_design_versions (
       id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
@@ -712,6 +719,7 @@ export function createTestDesignRepository(db, {
     if(op.action==='CLONE'){
       if(scenarios.some(item=>item?.scenarioId===op.newScenarioId))throw new TestRegistryError('Clone scenarioId already exists.',{code:'TEST_REGISTRY_SCENARIO_LIFECYCLE_ID_CONFLICT',status:409});
       const clone=structuredClone(sourceScenario);
+      delete clone.readinessV2; // A clone is not evidence for its own new identity.
       clone.scenarioId=op.newScenarioId;
       clone.title=op.title||`${sourceScenario.title||'Cenário'} · cópia`;
       if(op.objective)clone.objective=op.objective;
@@ -740,6 +748,7 @@ export function createTestDesignRepository(db, {
     const nextVersion=root.latestVersion+1,versionId=versionIdFactory(),createdAt=now().toISOString();
     const counts={scenarioCount:scenarios.length,readyCount:scenarios.filter(x=>x?.automation?.readiness==='READY').length,reviewRequiredCount:scenarios.filter(x=>x?.automation?.readiness==='REVIEW_REQUIRED').length};
     const origin={type:'SCENARIO_LIFECYCLE',action:op.action,operationId:op.operationId,scenarioId:op.scenarioId,...(op.newScenarioId?{newScenarioId:op.newScenarioId}:{}),sourceTestDesignVersionId:source.id,approvedByUserId:op.approvedByUserId,reason:op.reason};
+    validateReadinessAttachments(specification);
     const specificationJson=JSON.stringify(specification);
     const insert=db.prepare(`INSERT INTO test_design_versions (
       id, test_design_id, organization_id, project_id, endpoint_id, version, generation_request_id, context_fingerprint,
@@ -758,6 +767,8 @@ export function createTestDesignRepository(db, {
   }
 
   async function appendVersion(input) {
+    // Defense in depth for private repository callers, even with the rollout flag off.
+    validateReadinessAttachments(JSON.parse(input.specificationJson), { generation: true });
     const expectedRootId = await buildStableTestDesignId(input);
     const existingReplay = await getVersionByGenerationRequestId(input.generationRequestId);
     if (existingReplay) {
