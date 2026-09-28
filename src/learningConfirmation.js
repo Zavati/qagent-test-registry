@@ -4,7 +4,7 @@ import { COVERAGE_ASSERTION_TYPES, validateCoverageEvaluation, assertionCoverage
  * Called with authoritative Results/Registry data. No request values leave this module.
  * The proof is an internal service projection, not a payload accepted by the Console.
  */
-import { assessExploratoryLearning } from './learningScenarioEligibility.js';
+import { assessLearningAdmission, assessLearningProofSource, STRUCTURED_ADMISSION_BASIS } from './readiness/learningAdmissionV2.js';
 export const CONFIRMATION_TYPE = 'SCENARIO_READINESS_CONFIRMATION';
 export const CONFIRMATION_CONTRACT = 'qagent.learning-confirmation-proof.v1';
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o||{},k);
@@ -27,11 +27,12 @@ export function confirmationPathBindings(source){
  }
  return out;
 }
-function sourceEligible(source){
+function sourceEligible(source,admissionBasis=null){
  if(!source||source.baseline||source.generationClass==='OBSERVED_BASELINE')reject('LEARNING_CONFIRMATION_BASELINE_PROTECTED');
  if(source.learning&&source.learning.kind!=='NEGATIVE_REQUEST_REPAIR')reject('LEARNING_CONFIRMATION_ALREADY_RECORDED');
- if(!['REVIEW_REQUIRED','NEEDS_DATA'].includes(source.automation?.readiness))reject('LEARNING_CONFIRMATION_REVIEW_NOT_REQUIRED');
- const a=assessExploratoryLearning(source);if(!a.allowed)reject(a.reason);
+ if(!admissionBasis&&!['REVIEW_REQUIRED','NEEDS_DATA'].includes(source.automation?.readiness))reject('LEARNING_CONFIRMATION_REVIEW_NOT_REQUIRED');
+ const a=assessLearningProofSource(source,admissionBasis);if(!a.allowed&&!a.preparationAllowed)reject(a.reason);
+ if(admissionBasis&&source.readinessV2.regression.status==='READY')reject('LEARNING_CONFIRMATION_REVIEW_NOT_REQUIRED');
  if(!['UNAUTHENTICATED','REQUIRED','NONE'].includes(source.spec?.auth?.requirement))reject('LEARNING_CONFIRMATION_AUTH_INTENT_UNSUPPORTED');
  return a;
 }
@@ -42,9 +43,11 @@ function templateMatches(template,actual){
 }
 // Internal evidence validator reused by confirmation and explicit coverage extension.
 // Only the extension wrapper may omit STATUS; it adds it in a reviewed new version.
-export async function buildLearningExecutionProof({resultSet:rs,scenario,sourceVersion}, {requireStatus=true}={}){
+export async function buildLearningExecutionProof({resultSet:rs,scenario,sourceVersion,readinessV2Enabled=false}, {requireStatus=true}={}){
  const source=sourceVersion?.specification?.scenarios?.find(s=>s.scenarioId===scenario?.scenarioId);
- const admission=sourceEligible(source);
+ if(readinessV2Enabled&&own(source,'readinessV2')){const check=assessLearningAdmission(source,{enabled:true});if(!check.allowed&&!check.preparationAllowed)reject(check.reason);}
+ const admissionBasis=readinessV2Enabled&&source?.readinessV2?.basis==='NATIVE_V2'?STRUCTURED_ADMISSION_BASIS:null;
+ const admission=sourceEligible(source,admissionBasis);
  const versionId=sourceVersion.id||sourceVersion.testDesignVersionId;
  if(!rs||versionId!==rs.testDesignVersionId||sourceVersion.testDesignId!==rs.testDesignId||sourceVersion.organizationId!==rs.organizationId||sourceVersion.projectId!==rs.projectId||sourceVersion.endpointId!==rs.endpointId||source.spec.target.catalogEndpointId!==rs.endpointId)reject('LEARNING_CONFIRMATION_SCOPE_MISMATCH');
  const evidence=scenario.evidence,request=evidence?.request,http=scenario.http;
@@ -106,16 +109,17 @@ export async function buildLearningExecutionProof({resultSet:rs,scenario,sourceV
   if(!x||x.source!==(b.source==='OBSERVED'?'FIXED':b.source)||x.valueType!==b.valueType)reject('LEARNING_CONFIRMATION_BINDING_EVIDENCE_MISMATCH');
  }
  if(typeof rs.completedAt!=='string'||!Number.isFinite(Date.parse(rs.completedAt)))reject('LEARNING_CONFIRMATION_COMPLETION_MISSING');
- return validateConfirmationProof({contractVersion:CONFIRMATION_CONTRACT,organizationId:rs.organizationId,projectId:rs.projectId,endpointId:rs.endpointId,testDesignId:rs.testDesignId,testDesignVersionId:versionId,scenarioId:source.scenarioId,environmentId:rs.environmentId,resultSetId:rs.resultSetId,scenarioResultId:scenario.scenarioResultId,runId:rs.runId,completedAt:rs.completedAt,executionPurpose:'LEARNING',sourceScenarioHash:await confirmationHash(source),assertionsHash:await confirmationHash(expected),assertionCount:expected.length,actualStatusCode:http.statusCode,authRequirement:required,resolvedBlockers:admission.deferredBlockers,addedBindings:additions});
+ return validateConfirmationProof({contractVersion:CONFIRMATION_CONTRACT,organizationId:rs.organizationId,projectId:rs.projectId,endpointId:rs.endpointId,testDesignId:rs.testDesignId,testDesignVersionId:versionId,scenarioId:source.scenarioId,environmentId:rs.environmentId,resultSetId:rs.resultSetId,scenarioResultId:scenario.scenarioResultId,runId:rs.runId,completedAt:rs.completedAt,executionPurpose:'LEARNING',sourceScenarioHash:await confirmationHash(source),assertionsHash:await confirmationHash(expected),assertionCount:expected.length,actualStatusCode:http.statusCode,authRequirement:required,resolvedBlockers:admission.deferredBlockers,addedBindings:additions,...(admissionBasis?{admissionBasis}:{})});
 }
 export async function buildConfirmationProof(input){
  const source=input.sourceVersion?.specification?.scenarios?.find(s=>s.scenarioId===input.scenario?.scenarioId);
- if(assertionCoverageGaps(source).length)reject('LEARNING_ASSERTION_COVERAGE_REQUIRES_EXTENSION');
+ if(assertionCoverageGaps(source).length||(input.readinessV2Enabled&&source?.readinessV2?.basis==='NATIVE_V2'&&source.readinessV2.coverage?.status!=='COMPLETE'))reject('LEARNING_ASSERTION_COVERAGE_REQUIRES_EXTENSION');
  return buildLearningExecutionProof(input);
 }
 const fields=['contractVersion','organizationId','projectId','endpointId','testDesignId','testDesignVersionId','scenarioId','environmentId','resultSetId','scenarioResultId','runId','completedAt','executionPurpose','sourceScenarioHash','assertionsHash','assertionCount','actualStatusCode','authRequirement','resolvedBlockers','addedBindings'];
 export function validateConfirmationProof(p){
- if(!plain(p)||Object.keys(p).length!==fields.length||Object.keys(p).some(k=>!fields.includes(k))||p.contractVersion!==CONFIRMATION_CONTRACT||p.executionPurpose!=='LEARNING')reject('LEARNING_CONFIRMATION_PROOF_INVALID');
+ const marked=own(p,'admissionBasis');
+ if(!plain(p)||Object.keys(p).length!==fields.length+(marked?1:0)||Object.keys(p).some(k=>!fields.includes(k)&&k!=='admissionBasis')||(marked&&p.admissionBasis!==STRUCTURED_ADMISSION_BASIS)||p.contractVersion!==CONFIRMATION_CONTRACT||p.executionPurpose!=='LEARNING')reject('LEARNING_CONFIRMATION_PROOF_INVALID');
  for(const k of fields.slice(1,11))if(typeof p[k]!=='string'||!ID.test(p[k]))reject('LEARNING_CONFIRMATION_PROOF_INVALID');
  if(!Number.isFinite(Date.parse(p.completedAt))||typeof p.completedAt!=='string'||p.completedAt.length>35||!Number.isInteger(p.assertionCount)||p.assertionCount<1||p.assertionCount>100||!Number.isInteger(p.actualStatusCode)||p.actualStatusCode<200||p.actualStatusCode>=500)reject('LEARNING_CONFIRMATION_PROOF_INVALID');
  if(!['NONE','UNAUTHENTICATED','REQUIRED'].includes(p.authRequirement)||![p.sourceScenarioHash,p.assertionsHash].every(h=>/^[a-f0-9]{64}$/.test(h)))reject('LEARNING_CONFIRMATION_PROOF_INVALID');
@@ -125,8 +129,8 @@ export function validateConfirmationProof(p){
  return structuredClone(p);
 }
 export async function applyConfirmationToScenario(source,proof,scope){
- const p=validateConfirmationProof(proof),a=sourceEligible(source);
- if(assertionCoverageGaps(source).length||!source.spec?.assertions?.some(a=>a.type==='STATUS'))reject('LEARNING_ASSERTION_COVERAGE_REQUIRES_EXTENSION');
+ const p=validateConfirmationProof(proof),a=sourceEligible(source,p.admissionBasis||null);
+ if(assertionCoverageGaps(source).length||(p.admissionBasis&&source.readinessV2?.coverage?.status!=='COMPLETE')||!source.spec?.assertions?.some(a=>a.type==='STATUS'))reject('LEARNING_ASSERTION_COVERAGE_REQUIRES_EXTENSION');
  for(const k of ['organizationId','projectId','endpointId','testDesignId'])if(scope[k]!==p[k])reject('LEARNING_CONFIRMATION_SCOPE_MISMATCH');
  if(scope.id!==p.testDesignVersionId||source.scenarioId!==p.scenarioId||await confirmationHash(source)!==p.sourceScenarioHash||await confirmationHash(source.spec.assertions)!==p.assertionsHash)reject('LEARNING_CONFIRMATION_SOURCE_MISMATCH');
  if(confirmationJson(a.deferredBlockers)!==confirmationJson(p.resolvedBlockers)||confirmationJson(confirmationPathBindings(source))!==confirmationJson(p.addedBindings)||source.spec.auth.requirement!==p.authRequirement||source.spec.assertions.length!==p.assertionCount||!source.spec.assertions.filter(a=>a.type==='STATUS').every(a=>a.expectedStatusCodes.includes(p.actualStatusCode)))reject('LEARNING_CONFIRMATION_PROOF_MISMATCH');

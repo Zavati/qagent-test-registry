@@ -3,7 +3,7 @@
  * Facts are read from authoritative Results; approval rechecks the same proof.
  */
 import { buildLearningExecutionProof, validateConfirmationProof, confirmationHash, confirmationJson, confirmationPathBindings } from './learningConfirmation.js';
-import { assessExploratoryLearning } from './learningScenarioEligibility.js';
+import { assessLearningProofSource } from './readiness/learningAdmissionV2.js';
 import { validateCoverageAssertion, assertionCoverageGaps, valueAtSimplePath, jsonValueType, jsonTypeMatches, positiveQueryBound, schemaNodeAtPath } from './coverageAssertions.js';
 import { validateStructuralEvidence } from './activeLearningSchema.js';
 export const COVERAGE_CHANGE = 'ASSERTION_COVERAGE_EXTENSION';
@@ -104,8 +104,8 @@ export function validateCoverageProof(proof){
  return {...proof,execution,observations,additions};
 }
 export async function applyCoverageToScenario(source,proof,scope){
- const p=validateCoverageProof(proof),e=p.execution,a=assessExploratoryLearning(source);
- if(!a.allowed||source.baseline||source.generationClass==='OBSERVED_BASELINE'||source.learning||!['REVIEW_REQUIRED','NEEDS_DATA'].includes(source.automation?.readiness))err(a.reason||'LEARNING_COVERAGE_SOURCE_UNSUPPORTED');
+ const p=validateCoverageProof(proof),e=p.execution,a=assessLearningProofSource(source,e.admissionBasis||null);
+ if((!a.allowed&&!a.preparationAllowed)||source.baseline||source.generationClass==='OBSERVED_BASELINE'||source.learning||(!e.admissionBasis&&!['REVIEW_REQUIRED','NEEDS_DATA'].includes(source.automation?.readiness)))err(a.reason||'LEARNING_COVERAGE_SOURCE_UNSUPPORTED');
  for(const k of ['organizationId','projectId','endpointId','testDesignId'])if(scope[k]!==e[k])err('LEARNING_COVERAGE_SCOPE_MISMATCH');
  if(scope.id!==e.testDesignVersionId||source.scenarioId!==e.scenarioId||source.spec?.target?.catalogEndpointId!==e.endpointId||await confirmationHash(source)!==e.sourceScenarioHash||await confirmationHash(source.spec.assertions)!==e.assertionsHash)err('LEARNING_COVERAGE_SOURCE_MISMATCH');
  if(confirmationJson(a.deferredBlockers)!==confirmationJson(e.resolvedBlockers)||confirmationJson(confirmationPathBindings(source))!==confirmationJson(e.addedBindings)||source.spec.auth.requirement!==e.authRequirement||source.spec.assertions.length!==e.assertionCount)err('LEARNING_COVERAGE_PROOF_MISMATCH');
