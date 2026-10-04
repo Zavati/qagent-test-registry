@@ -1,3 +1,4 @@
+import { READINESS_DERIVATION_CONTRACT } from '../readiness/readinessReconciliation.js';
 import { NEGATIVE_REPAIR_CHANGE } from '../negativeRequestStrategy.js';
 import { validateNegativeRepairProof } from '../negativeRequestRepair.js';
 import { COVERAGE_CHANGE, validateCoverageProof } from '../learningCoverage.js';
@@ -66,8 +67,10 @@ export function validateDerivedVersionInput(input, env={}) {
   const projectId=text(payload.projectId,"payload.projectId",160);
   const sourceTestDesignVersionId=text(payload.sourceTestDesignVersionId,"payload.sourceTestDesignVersionId",180);
   const derivation=object(payload.derivation,"payload.derivation");
-  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason","proposals"]),"payload.derivation");
+  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason","proposals","readinessReconciliationContractVersion"]),"payload.derivation");
   if(derivation.type!=="RESULT_EVOLUTION") fail("Unsupported derivation type.","payload.derivation.type");
+  const marker=derivation.readinessReconciliationContractVersion;
+  if(Object.hasOwn(derivation,'readinessReconciliationContractVersion')&&marker!==READINESS_DERIVATION_CONTRACT)fail('Invalid readiness derivation marker.','payload.derivation.readinessReconciliationContractVersion','READINESS_DERIVATION_INVALID');
   const proposalId=text(derivation.proposalId,"payload.derivation.proposalId",180);
   const sourceResultSetId=text(derivation.sourceResultSetId,"payload.derivation.sourceResultSetId",180);
   const sourceScenarioResultId=text(derivation.sourceScenarioResultId,"payload.derivation.sourceScenarioResultId",180);
@@ -164,7 +167,7 @@ export function validateDerivedVersionInput(input, env={}) {
   });
   const serialized=JSON.stringify(payload); const bytes=new TextEncoder().encode(serialized).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes) fail("Request body exceeds persistence limit.","payload","TEST_REGISTRY_REQUEST_TOO_LARGE",413);
-  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason,...(proposals?{proposals}:{})},changes};
+  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason,...(proposals?{proposals}:{}),...(marker?{readinessReconciliationContractVersion:marker}:{})},changes};
 }
 
 export { validateInternalTenantHeaders };

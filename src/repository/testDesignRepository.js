@@ -1,4 +1,4 @@
-import { invalidateDerivedReadiness, validateReadinessAttachments } from '../readiness/readinessDerivation.js';
+import { reconcileDerivedReadiness, invalidateDerivedReadiness, validateReadinessAttachments } from '../readiness/readinessDerivation.js';
 import { NEGATIVE_REPAIR_CHANGE, negativePreparationGate } from '../negativeRequestStrategy.js';
 import { applyNegativeRepairToScenario } from '../negativeRequestRepair.js';
 import { COVERAGE_CHANGE, applyCoverageToScenario } from '../learningCoverage.js';
@@ -428,6 +428,8 @@ export function createTestDesignRepository(db, {
       }
     }
 
+    if (input.derivation.readinessReconciliationContractVersion) reconcileDerivedReadiness(specification, source.specification, input.changes);
+    else invalidateDerivedReadiness(specification, input.changes.map(change => change.scenarioId));
     const counts={scenarioCount:specification.scenarios.length,readyCount:0,reviewRequiredCount:0};
     const byReadiness={};
     for(const scenario of specification.scenarios){const r=scenario.automation?.readiness||'REVIEW_REQUIRED';byReadiness[r]=(byReadiness[r]||0)+1;if(r==='READY')counts.readyCount++;if(r==='REVIEW_REQUIRED')counts.reviewRequiredCount++;}
@@ -442,7 +444,6 @@ export function createTestDesignRepository(db, {
       approvalReason: input.derivation.approvalReason || null,
       ...(input.derivation.proposals?{proposals:input.derivation.proposals}:{}),
     };
-    invalidateDerivedReadiness(specification, input.changes.map(change => change.scenarioId));
     validateReadinessAttachments(specification);
     const specificationJson = JSON.stringify(specification);
     const insert = db.prepare(
