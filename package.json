@@ -45,7 +45,8 @@
     "check:08.1.6-fix3": "npm run check:08.1.6-fix2-4 && npm run test:f08-1-6-fix3",
     "test:f08-1-7-a": "node --test test/structured-readiness-08.1.7-a.test.mjs test/structured-readiness-integration-08.1.7-a.test.mjs",
     "test:f08-1-7-b": "node --test test/structured-learning-proof-08.1.7-b.test.mjs",
-    "test:f08-1-7-c": "node --test test/readiness-derivation-08.1.7-c.test.mjs"
+    "test:f08-1-7-c": "node --test test/readiness-derivation-08.1.7-c.test.mjs",
+    "test:f08-1-7-c-fix2": "node --test test/status-coverage-08.1.7-c-fix2.test.mjs"
   },
   "engines": {
     "node": ">=24"

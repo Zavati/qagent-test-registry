@@ -1,3 +1,4 @@
+import { isStatusCoverageProof } from '../statusCoverage.js';
 import { READINESS_DERIVATION_CONTRACT } from '../readiness/readinessReconciliation.js';
 import { NEGATIVE_REPAIR_CHANGE } from '../negativeRequestStrategy.js';
 import { validateNegativeRepairProof } from '../negativeRequestRepair.js';
@@ -94,6 +95,7 @@ export function validateDerivedVersionInput(input, env={}) {
       known(c,new Set(['type','scenarioId','assertionIndex',isRepair?'repairProof':isCoverage?'coverageProof':'confirmationProof','learningSource']),path);
       if(c.assertionIndex!==0||!approvedByUserId||!approvalReason)fail('Hypothesis confirmation requires explicit approval.',path,'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',409);
       let proof,coverageProof;try{if(isRepair){proof=validateNegativeRepairProof(c.repairProof);}else if(isCoverage){coverageProof=validateCoverageProof(c.coverageProof);proof=coverageProof.execution;}else proof=validateConfirmationProof(c.confirmationProof);}catch(e){fail(e.message,path,e.code,409);}
+      if(isCoverage&&isStatusCoverageProof(coverageProof)&&marker!==READINESS_DERIVATION_CONTRACT)fail('STATUS-only coverage requires pending C derivation.',path,'LEARNING_STATUS_DERIVATION_MARKER_REQUIRED',409);
       const source=object(c.learningSource,`${path}.learningSource`);known(source,new Set(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId']),path);
       const ls=Object.fromEntries(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].map(k=>[k,text(source[k],`${path}.learningSource.${k}`,180)]));
       if(proof.organizationId!==organizationId||proof.projectId!==projectId||proof.scenarioId!==scenarioId||proof.testDesignVersionId!==sourceTestDesignVersionId||['resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId'].some(k=>ls[k]!==proof[k]))fail('Confirmation proof scope mismatch.',path,'LEARNING_CONFIRMATION_SCOPE_MISMATCH',409);

@@ -1,3 +1,4 @@
+import { STATUS_COVERAGE_CONTRACT, isStatusCoverageProof, assertStatusCoverageSource, validateStatusCoverageObservation, statusCoverageObservationFromExecution, deriveStatusCoverageAdditions } from './statusCoverage.js';
 /** FIX-2.3: bounded additive repair of assertion coverage in existing Evolution.
  * Source assertions, request, authentication and provenance are never replaced.
  * Facts are read from authoritative Results; approval rechecks the same proof.
@@ -47,6 +48,8 @@ function validateObservation(o){
 }
 function derivedAdditions(source,execution,observations){
  const gaps=assertionCoverageGaps(source),additions=[];
+ // No unmarked STATUS-only proof: old builders always required a specialized gap.
+ if(!gaps.length)err('LEARNING_COVERAGE_NOT_REQUIRED');
  if(gaps.length!==observations.length)err('LEARNING_COVERAGE_REQUIREMENTS_MISMATCH');
  for(let i=0;i<gaps.length;i++){
   const g=gaps[i],o=validateObservation(observations[i]);
@@ -71,7 +74,16 @@ function derivedAdditions(source,execution,observations){
 export async function buildCoverageProof(input){
  const source=input.sourceVersion?.specification?.scenarios?.find(s=>s.scenarioId===input.scenario?.scenarioId);
  const gaps=assertionCoverageGaps(source);
- if(!gaps.length)err('LEARNING_COVERAGE_NOT_REQUIRED');
+ if(!gaps.length){
+  if(input.statusCoverageEnabled!==true)err('LEARNING_COVERAGE_NOT_REQUIRED');
+  assertStatusCoverageSource(source);
+  if(input.readinessV2Enabled!==true)err('LEARNING_STATUS_NATIVE_SOURCE_REQUIRED');
+  const execution=await buildLearningExecutionProof(input,{requireStatus:false});
+  const observation=statusCoverageObservationFromExecution(input,execution);
+  const additions=deriveStatusCoverageAdditions(source,execution,[observation]);
+  return validateCoverageProof({contractVersion:COVERAGE_PROOF,statusCoverageContractVersion:STATUS_COVERAGE_CONTRACT,
+    execution,observations:[observation],additions,additionsHash:await confirmationHash(additions)});
+ }
  const execution=await buildLearningExecutionProof(input,{requireStatus:false});
  if(execution.actualStatusCode<200||execution.actualStatusCode>=300)err('LEARNING_COVERAGE_STATUS_CONFLICT');
  const scenario=input.scenario,body=bodyEvidence(scenario),observations=[];
@@ -92,11 +104,14 @@ export async function buildCoverageProof(input){
  return validateCoverageProof({contractVersion:COVERAGE_PROOF,execution,observations,additions,additionsHash:await confirmationHash(additions)});
 }
 export function validateCoverageProof(proof){
- exact(proof,['contractVersion','execution','observations','additions','additionsHash']);
+ const marked=Object.prototype.hasOwnProperty.call(proof||{},'statusCoverageContractVersion');
+ exact(proof,['contractVersion','execution','observations','additions','additionsHash',...(marked?['statusCoverageContractVersion']:[])]);
+ if(marked&&!isStatusCoverageProof(proof))err('LEARNING_STATUS_PROOF_INVALID');
  if(proof.contractVersion!==COVERAGE_PROOF||!Array.isArray(proof.observations)||proof.observations.length>5||!Array.isArray(proof.additions)||!proof.additions.length||proof.additions.length>6||!/^[0-9a-f]{64}$/.test(proof.additionsHash))err('LEARNING_COVERAGE_PROOF_INVALID');
  const execution=validateConfirmationProof(proof.execution);
  if(execution.actualStatusCode<200||execution.actualStatusCode>=300)err('LEARNING_COVERAGE_STATUS_CONFLICT');
- const observations=proof.observations.map(validateObservation);
+ const observations=marked?proof.observations.map(o=>validateStatusCoverageObservation(o,execution)):proof.observations.map(validateObservation);
+ if(marked&&(observations.length!==1||proof.additions.length!==1||proof.additions[0]?.type!=='STATUS'))err('LEARNING_STATUS_PROOF_INVALID');
  const additions=proof.additions.map(a=>{
    if(a?.type!=='STATUS')return validateCoverageAssertion(a);
    exact(a,['type','expectedStatusCodes']);if(confirmationJson(a.expectedStatusCodes)!==confirmationJson([execution.actualStatusCode]))err('LEARNING_COVERAGE_STATUS_CONFLICT');return structuredClone(a);
@@ -109,7 +124,7 @@ export async function applyCoverageToScenario(source,proof,scope){
  for(const k of ['organizationId','projectId','endpointId','testDesignId'])if(scope[k]!==e[k])err('LEARNING_COVERAGE_SCOPE_MISMATCH');
  if(scope.id!==e.testDesignVersionId||source.scenarioId!==e.scenarioId||source.spec?.target?.catalogEndpointId!==e.endpointId||await confirmationHash(source)!==e.sourceScenarioHash||await confirmationHash(source.spec.assertions)!==e.assertionsHash)err('LEARNING_COVERAGE_SOURCE_MISMATCH');
  if(confirmationJson(a.deferredBlockers)!==confirmationJson(e.resolvedBlockers)||confirmationJson(confirmationPathBindings(source))!==confirmationJson(e.addedBindings)||source.spec.auth.requirement!==e.authRequirement||source.spec.assertions.length!==e.assertionCount)err('LEARNING_COVERAGE_PROOF_MISMATCH');
- const additions=derivedAdditions(source,e,p.observations);
+ const additions=isStatusCoverageProof(p)?deriveStatusCoverageAdditions(source,e,p.observations):derivedAdditions(source,e,p.observations);
  if(confirmationJson(additions)!==confirmationJson(p.additions)||await confirmationHash(additions)!==p.additionsHash)err('LEARNING_COVERAGE_PROOF_MISMATCH');
  const out=structuredClone(source);out.spec.assertions.push(...additions);
  if(e.addedBindings.length)out.spec.testData={contractVersion:'qagent.test-data-bindings.v1',bindings:[...(out.spec.testData?.bindings||[]),...e.addedBindings]};
