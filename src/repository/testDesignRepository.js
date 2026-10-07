@@ -1,3 +1,4 @@
+import { verifyAuthority, assertAuthorityChange, authoritySummary, authorityError } from '../autonomousAuthority.js';
 import { reconcileDerivedReadiness, invalidateDerivedReadiness, validateReadinessAttachments } from '../readiness/readinessDerivation.js';
 import { NEGATIVE_REPAIR_CHANGE, negativePreparationGate } from '../negativeRequestStrategy.js';
 import { applyNegativeRepairToScenario } from '../negativeRequestRepair.js';
@@ -167,6 +168,7 @@ export function createTestDesignRepository(db, {
   now = () => new Date(),
   versionIdFactory = createTestDesignVersionId,
   maxVersionRetries = 3,
+  authorityEnv = null,
 } = {}) {
   if (!db?.prepare || !db?.batch) {
     throw new TestRegistryError("TEST_REGISTRY_DB binding is unavailable.", {
@@ -253,6 +255,13 @@ export function createTestDesignRepository(db, {
   }
 
   async function appendDerivedVersion(input) {
+    const approvalAuthorization=input.derivation.approvalAuthorization;
+    if(approvalAuthorization){
+      await verifyAuthority(authorityEnv,approvalAuthorization,{organizationId:input.organizationId,projectId:input.projectId,sourceTestDesignVersionId:input.sourceTestDesignVersionId},now().getTime());
+      if(input.derivation.approvedByUserId||approvalAuthorization.members.length!==input.changes.length||input.derivation.readinessReconciliationContractVersion!=='qagent.readiness-derivation.v1')authorityError('AUTONOMOUS_APPROVAL_INVALID');
+      for(const c of input.changes){if(![COVERAGE_CHANGE,CONFIRMATION_TYPE].includes(c.type))authorityError('AUTONOMOUS_CHANGE_NOT_DELEGATED');await assertAuthorityChange(approvalAuthorization,{proposalId:c.learningSource?.proposalId,scenarioId:c.scenarioId,changeType:c.type,proof:c.type===COVERAGE_CHANGE?c.coverageProof:c.confirmationProof});}
+    }
+
     const derivationKey = `RESULT_EVOLUTION:${input.derivation.proposalId}`;
     const replay = await getVersionByDerivationKey(derivationKey);
     if (replay) {
@@ -282,6 +291,7 @@ export function createTestDesignRepository(db, {
     for (const change of input.changes) {
       const scenario = (specification.scenarios || []).find((item) => item?.scenarioId === change.scenarioId);
       if (!scenario) throw new TestRegistryError("Evolution scenario not found in source version.", { code: "TEST_REGISTRY_EVOLUTION_SCENARIO_NOT_FOUND", status: 409 });
+      if(approvalAuthorization&&(!['GET','HEAD','OPTIONS'].includes(scenario.spec?.target?.method)||scenario.baseline||scenario.generationClass==='OBSERVED_BASELINE'))authorityError('AUTONOMOUS_CHANGE_NOT_DELEGATED');
       if(change.type===NEGATIVE_REPAIR_CHANGE){
         if(!input.derivation.approvedByUserId||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Request repair requires isolated reviewed changes.',{code:'NEGATIVE_REQUEST_REPAIR_APPROVAL_REQUIRED',status:409});
         const repaired=await applyNegativeRepairToScenario(scenario,change.repairProof,source),p=change.repairProof,e=change.learningSource;
@@ -289,17 +299,17 @@ export function createTestDesignRepository(db, {
         Object.assign(scenario,repaired);continue;
       }
       if(change.type===COVERAGE_CHANGE){
-        if(!input.derivation.approvedByUserId||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Coverage extension requires isolated reviewed changes.',{code:'LEARNING_COVERAGE_APPROVAL_REQUIRED',status:409});
+        if((!input.derivation.approvedByUserId&&!approvalAuthorization)||!input.derivation.approvalReason||input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Coverage extension requires isolated reviewed changes.',{code:'LEARNING_COVERAGE_APPROVAL_REQUIRED',status:409});
         const extended=await applyCoverageToScenario(scenario,change.coverageProof,source),p=change.coverageProof.execution,e=change.learningSource;
-        extended.learning={contractVersion:'qagent.scenario-learning.v1',kind:'ASSERTION_COVERAGE_EXTENSION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:await confirmationHash(extended.spec.assertions),sourceAssertionsHash:p.assertionsHash,assertionCount:extended.spec.assertions.length,assertionsUnchanged:false,existingAssertionsPreserved:true,addedAssertions:change.coverageProof.additions,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,approvedAt:now().toISOString()};
+        extended.learning={contractVersion:'qagent.scenario-learning.v1',kind:'ASSERTION_COVERAGE_EXTENSION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:await confirmationHash(extended.spec.assertions),sourceAssertionsHash:p.assertionsHash,assertionCount:extended.spec.assertions.length,assertionsUnchanged:false,existingAssertionsPreserved:true,addedAssertions:change.coverageProof.additions,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,...(approvalAuthorization?{approvalAuthority:authoritySummary(approvalAuthorization)}:{}),approvedAt:now().toISOString()};
         Object.assign(scenario,extended);continue;
       }
       if(change.type===CONFIRMATION_TYPE){
-        if(!input.derivation.approvedByUserId||!input.derivation.approvalReason)throw new TestRegistryError('Explicit approval required.',{code:'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',status:409});
+        if((!input.derivation.approvedByUserId&&!approvalAuthorization)||!input.derivation.approvalReason)throw new TestRegistryError('Explicit approval required.',{code:'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',status:409});
         if(input.changes.filter(c=>c.scenarioId===scenario.scenarioId).length!==1)throw new TestRegistryError('Conflicting scenario changes.',{code:'TEST_EVOLUTION_BATCH_CHANGE_CONFLICT',status:409});
         const confirmed=await applyConfirmationToScenario(scenario,change.confirmationProof,source);
         const p=change.confirmationProof,e=change.learningSource;
-        confirmed.learning={contractVersion:'qagent.scenario-learning.v1',kind:'HYPOTHESIS_CONFIRMATION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:p.assertionsHash,assertionCount:p.assertionCount,assertionsUnchanged:true,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,approvedAt:now().toISOString()};
+        confirmed.learning={contractVersion:'qagent.scenario-learning.v1',kind:'HYPOTHESIS_CONFIRMATION',phase:'PENDING_VERIFICATION',proposalId:e.proposalId,sourceResultSetId:p.resultSetId,sourceScenarioResultId:p.scenarioResultId,sourceRunId:p.runId,sourceTestDesignVersionId:source.id,environmentId:p.environmentId,sourceScenarioHash:p.sourceScenarioHash,assertionsHash:p.assertionsHash,assertionCount:p.assertionCount,assertionsUnchanged:true,resolvedBlockers:p.resolvedBlockers,approvedByUserId:input.derivation.approvedByUserId,...(approvalAuthorization?{approvalAuthority:authoritySummary(approvalAuthorization)}:{}),approvedAt:now().toISOString()};
         Object.assign(scenario,confirmed);
         continue;
       }
@@ -442,6 +452,7 @@ export function createTestDesignRepository(db, {
       sourceResultSetId: input.derivation.sourceResultSetId, sourceScenarioResultId: input.derivation.sourceScenarioResultId,
       sourceTestDesignVersionId: source.id, approvedByUserId: input.derivation.approvedByUserId || null,
       approvalReason: input.derivation.approvalReason || null,
+      ...(approvalAuthorization?{approvalAuthority:authoritySummary(approvalAuthorization)}:{}),
       ...(input.derivation.proposals?{proposals:input.derivation.proposals}:{}),
     };
     validateReadinessAttachments(specification);

@@ -1,3 +1,4 @@
+import { verifyAuthority } from '../autonomousAuthority.js';
 import { TestRegistryError } from "../domain/errors.js";
 import { RUNNER_TEST_ARTIFACT_CONTRACT_VERSION } from "../domain/contracts.js";
 import { createTestDesignRepository } from "../repository/testDesignRepository.js";
@@ -231,7 +232,8 @@ export async function derivedVersionRoute(request, env) {
   const body = await readJsonBody(request, env);
   const input = validateDerivedVersionInput(body, env);
   validateInternalTenantHeaders(request, input);
-  const repository = createTestDesignRepository(env.TEST_REGISTRY_DB);
+  if(input.derivation.approvalAuthorization)await verifyAuthority(env,input.derivation.approvalAuthorization,{organizationId:input.organizationId,projectId:input.projectId,sourceTestDesignVersionId:input.sourceTestDesignVersionId});
+  const repository = createTestDesignRepository(env.TEST_REGISTRY_DB,{authorityEnv:env});
   const result = await repository.appendDerivedVersion(input);
   return {
     status: result.created ? 201 : 200,

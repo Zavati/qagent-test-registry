@@ -1,3 +1,4 @@
+import { validateAuthorityShape } from '../autonomousAuthority.js';
 import { isStatusCoverageProof } from '../statusCoverage.js';
 import { READINESS_DERIVATION_CONTRACT } from '../readiness/readinessReconciliation.js';
 import { NEGATIVE_REPAIR_CHANGE } from '../negativeRequestStrategy.js';
@@ -68,7 +69,7 @@ export function validateDerivedVersionInput(input, env={}) {
   const projectId=text(payload.projectId,"payload.projectId",160);
   const sourceTestDesignVersionId=text(payload.sourceTestDesignVersionId,"payload.sourceTestDesignVersionId",180);
   const derivation=object(payload.derivation,"payload.derivation");
-  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason","proposals","readinessReconciliationContractVersion"]),"payload.derivation");
+  known(derivation,new Set(["type","proposalId","sourceResultSetId","sourceScenarioResultId","approvedByUserId","approvalReason","proposals","readinessReconciliationContractVersion","approvalAuthorization"]),"payload.derivation");
   if(derivation.type!=="RESULT_EVOLUTION") fail("Unsupported derivation type.","payload.derivation.type");
   const marker=derivation.readinessReconciliationContractVersion;
   if(Object.hasOwn(derivation,'readinessReconciliationContractVersion')&&marker!==READINESS_DERIVATION_CONTRACT)fail('Invalid readiness derivation marker.','payload.derivation.readinessReconciliationContractVersion','READINESS_DERIVATION_INVALID');
@@ -77,23 +78,26 @@ export function validateDerivedVersionInput(input, env={}) {
   const sourceScenarioResultId=text(derivation.sourceScenarioResultId,"payload.derivation.sourceScenarioResultId",180);
   const approvedByUserId=derivation.approvedByUserId==null?null:text(derivation.approvedByUserId,"payload.derivation.approvedByUserId",180);
   const approvalReason=derivation.approvalReason==null?null:text(derivation.approvalReason,"payload.derivation.approvalReason",1000);
+  const approvalAuthorization=derivation.approvalAuthorization;
+  if(approvalAuthorization){validateAuthorityShape(approvalAuthorization,{organizationId,projectId,sourceTestDesignVersionId});if(approvedByUserId||!approvalReason||marker!==READINESS_DERIVATION_CONTRACT)fail('Policy authorization cannot impersonate a human or bypass verification.','payload.derivation','AUTONOMOUS_APPROVAL_INVALID',403);}
   let proposals;
   if(derivation.proposals!=null){
-    if(!Array.isArray(derivation.proposals)||derivation.proposals.length<1||derivation.proposals.length>10)fail("Invalid grouped proposal lineage.","payload.derivation.proposals");
+    if(!Array.isArray(derivation.proposals)||derivation.proposals.length<1||derivation.proposals.length>(approvalAuthorization?50:10))fail("Invalid grouped proposal lineage.","payload.derivation.proposals");
     const ids=new Set();proposals=derivation.proposals.map((raw,i)=>{const path=`payload.derivation.proposals[${i}]`,m=object(raw,path);known(m,new Set(["proposalId","scenarioId","sourceResultSetId","sourceScenarioResultId"]),path);
       const item=Object.fromEntries(["proposalId","scenarioId","sourceResultSetId","sourceScenarioResultId"].map(k=>[k,text(m[k],`${path}.${k}`,180)]));if(ids.has(item.proposalId))fail("Duplicate proposal lineage.",path);ids.add(item.proposalId);return item;});
   }
-  if(!Array.isArray(payload.changes)||payload.changes.length<1||payload.changes.length>30) fail("At least one controlled change is required.","payload.changes");
+  if(!Array.isArray(payload.changes)||payload.changes.length<1||payload.changes.length>(approvalAuthorization?50:30)) fail("At least one controlled change is required.","payload.changes");
   const seen=new Set();
   const changes=payload.changes.map((raw,index)=>{
     const path=`payload.changes[${index}]`; const c=object(raw,path);
     known(c,new Set(["type","scenarioId","assertionIndex","bindingIndex","expectedStatusCodes","expectedContentTypes","schemaRef","path","expected","target","selector","currentSource","source","valueType","generatorKind","generatorConfig","learningProof","learningSource","confirmationProof","coverageProof","repairProof"]),path);
     const type=text(c.type,`${path}.type`,80); if(!ALLOWED_TYPES.has(type)) fail("Unsupported evolution change type.",`${path}.type`);
     const scenarioId=text(c.scenarioId,`${path}.scenarioId`,180);
+    if(approvalAuthorization&&![CONFIRMATION_TYPE,COVERAGE_CHANGE].includes(type))fail('Change is not delegated.',path,'AUTONOMOUS_CHANGE_NOT_DELEGATED',403);
     if(type===CONFIRMATION_TYPE||type===COVERAGE_CHANGE||type===NEGATIVE_REPAIR_CHANGE){
       const isCoverage=type===COVERAGE_CHANGE,isRepair=type===NEGATIVE_REPAIR_CHANGE;
       known(c,new Set(['type','scenarioId','assertionIndex',isRepair?'repairProof':isCoverage?'coverageProof':'confirmationProof','learningSource']),path);
-      if(c.assertionIndex!==0||!approvedByUserId||!approvalReason)fail('Hypothesis confirmation requires explicit approval.',path,'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',409);
+      if(c.assertionIndex!==0||(!approvedByUserId&&!approvalAuthorization)||!approvalReason)fail('Hypothesis confirmation requires explicit approval.',path,'LEARNING_CONFIRMATION_APPROVAL_REQUIRED',409);
       let proof,coverageProof;try{if(isRepair){proof=validateNegativeRepairProof(c.repairProof);}else if(isCoverage){coverageProof=validateCoverageProof(c.coverageProof);proof=coverageProof.execution;}else proof=validateConfirmationProof(c.confirmationProof);}catch(e){fail(e.message,path,e.code,409);}
       if(isCoverage&&isStatusCoverageProof(coverageProof)&&marker!==READINESS_DERIVATION_CONTRACT)fail('STATUS-only coverage requires pending C derivation.',path,'LEARNING_STATUS_DERIVATION_MARKER_REQUIRED',409);
       const source=object(c.learningSource,`${path}.learningSource`);known(source,new Set(['proposalId','resultSetId','scenarioResultId','runId','testDesignVersionId','environmentId']),path);
@@ -169,7 +173,7 @@ export function validateDerivedVersionInput(input, env={}) {
   });
   const serialized=JSON.stringify(payload); const bytes=new TextEncoder().encode(serialized).byteLength;
   if(bytes>registryLimits(env).maxRequestBytes) fail("Request body exceeds persistence limit.","payload","TEST_REGISTRY_REQUEST_TOO_LARGE",413);
-  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason,...(proposals?{proposals}:{}),...(marker?{readinessReconciliationContractVersion:marker}:{})},changes};
+  return {organizationId,projectId,sourceTestDesignVersionId,derivation:{type:"RESULT_EVOLUTION",proposalId,sourceResultSetId,sourceScenarioResultId,approvedByUserId,approvalReason,...(approvalAuthorization?{approvalAuthorization}:{}),...(proposals?{proposals}:{}),...(marker?{readinessReconciliationContractVersion:marker}:{})},changes};
 }
 
 export { validateInternalTenantHeaders };
