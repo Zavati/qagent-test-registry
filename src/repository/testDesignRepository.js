@@ -330,9 +330,9 @@ export function createTestDesignRepository(db, {
           const b=scenario.baseline;
           try{validateObservedBaselineScenario(scenario,source);}catch(e){stop(e.code);}
           if(!input.derivation.approvedByUserId)stop('LEARNING_BASELINE_HUMAN_APPROVAL_REQUIRED');
-          if(b.enrichment||b.responseCoverage.status!=='PARTIAL'||b.requestCoverage.status!=='COMPLETE'||b.selfCheck!=='PARTIAL'||Date.parse(b.expiresAt)<=Date.parse(approvedAt))stop('LEARNING_BASELINE_SOURCE_UNUSABLE');
+          if(b.enrichment||b.responseCoverage.status!=='PARTIAL'||b.requestCoverage.status!=='COMPLETE'||b.selfCheck!=='PARTIAL')stop('LEARNING_BASELINE_SOURCE_UNUSABLE');
           if(b.source.environmentId!==evidence.environmentId||b.responseSchemaVersionId!==proof.currentSchemaVersionId||b.responseSchemaHash!==proof.currentSchemaHash||b.source.statusCode!==proof.statusCode)stop('LEARNING_BASELINE_SCOPE_MISMATCH');
-          const operational=(scenario.automation?.blockers||[]).filter(b=>!['OBSERVED_BASELINE_RESPONSE_INCOMPLETE','OBSERVED_BASELINE_SELF_CHECK_INCOMPLETE'].includes(b));
+          const operational=(scenario.automation?.blockers||[]).filter(b=>!['OBSERVED_BASELINE_RESPONSE_INCOMPLETE','OBSERVED_BASELINE_SELF_CHECK_INCOMPLETE','OBSERVED_BASELINE_SOURCE_EXPIRED'].includes(b));
           if(operational.length||!scenario.spec?.target?.apiServiceKey||(scenario.spec?.auth?.requirement==='REQUIRED'&&!scenario.spec.auth.authProfileRef))stop('LEARNING_BASELINE_OPERATIONAL_BLOCK');
           b.enrichment={contractVersion:'qagent.baseline-enrichment.v1',proposalId:evidence.proposalId,sourceResultSetId:evidence.resultSetId,sourceScenarioResultId:evidence.scenarioResultId,sourceRunId:evidence.runId,sourceTestDesignVersionId:source.id,environmentId:evidence.environmentId,responseSchemaVersionId:change.schemaRef,responseSchemaHash:proof.schemaHash,approvedByUserId:input.derivation.approvedByUserId,approvedAt,selfCheck:'PASSED'};
           scenario.automation={...scenario.automation,readiness:'READY',blockers:[],evolutionState:'LEARNING'};

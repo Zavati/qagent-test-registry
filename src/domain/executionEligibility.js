@@ -1,4 +1,5 @@
 import { TestRegistryError } from "./errors.js";
+import { baselineExecutionReadiness } from "../baselineContract.js";
 
 export const SUITE_EXECUTION_ELIGIBILITY_POLICY_VERSION = "qagent.suite-execution-eligibility.v1";
 export const SUITE_SELECTION_POLICY_VERSION = "qagent.suite-selection-policy.v2";
@@ -42,7 +43,7 @@ function normalizeTarget(scenario) {
 }
 
 export function classifySuiteExecutionEligibility(scenario) {
-  if (scenario?.automation?.readiness !== "READY") {
+  if (baselineExecutionReadiness(scenario) !== "READY") {
     return { eligible: false, candidate: false, reason: null, method: normalizeMethod(scenario?.spec?.target?.method) };
   }
   const method = normalizeMethod(scenario?.spec?.target?.method);
@@ -76,7 +77,7 @@ export function buildTestDesignExecutionProjection({
     return {
       scenarioId: scenario.scenarioId,
       generationClass: scenario.generationClass || "LEGACY",
-      readiness: scenario.automation?.readiness || "REVIEW_REQUIRED",
+      readiness: baselineExecutionReadiness(scenario),
       ...(scenario.generationClass === "OBSERVED_BASELINE" && b ? {
         baselineId: b.baselineId, sourceEventId: b.source.eventId,
         sourceEvidenceId: b.source.evidenceId, observationSessionId: b.source.observationSessionId,
@@ -98,7 +99,7 @@ export function buildTestDesignExecutionProjection({
   let firstTarget = null;
 
   for (const scenario of scenarios) {
-    const readiness = scenario?.automation?.readiness;
+    const readiness = baselineExecutionReadiness(scenario);
     if (readiness === "REVIEW_REQUIRED") reviewRequiredScenarioCount += 1;
     if (readiness === "NEEDS_DATA") needsDataScenarioCount += 1;
     if (readiness === "NEEDS_AUTH") needsAuthScenarioCount += 1;

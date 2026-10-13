@@ -159,7 +159,7 @@ export function validateAppendVersionInput(input, env = {}) {
     catch(error){throw new TestRegistryError(error.message,{code:error.code||'OBSERVED_BASELINE_CONTRACT_INVALID',status:409});}
     if(scenario.generationClass==='OBSERVED_BASELINE'){
       if(scenario.spec?.testData || Object.values(scenario.spec?.request||{}).some(v=>v!=null&&(typeof v!=='object'||Object.keys(v).length)))fail('Baseline request must remain a reference, not inline values.','specification.scenarios','OBSERVED_BASELINE_INLINE_DATA_FORBIDDEN');
-      if(scenario.automation?.readiness==='READY'&&!observedBaselineReady(scenario.baseline))fail('Incomplete or expired baseline cannot be READY.','specification.scenarios','OBSERVED_BASELINE_NOT_READY');
+      if(scenario.automation?.readiness==='READY'&&!observedBaselineReady(scenario.baseline))fail('Incomplete baseline cannot be READY.','specification.scenarios','OBSERVED_BASELINE_NOT_READY');
     } else if(scenario.generationClass!=null&&scenario.generationClass!=='AI_EXPLORATORY')fail('Unknown generation origin.','specification.scenarios');
   }
 
