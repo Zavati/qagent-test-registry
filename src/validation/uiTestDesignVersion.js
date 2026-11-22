@@ -1,6 +1,7 @@
 import { TestRegistryError } from '../domain/errors.js';
 import { canonicalUiJson, uiByteLength, uiContentHash, uiSha256, UI_COMPILATION_MAX_BYTES } from '../domain/uiTestDesignCanonical.js';
 import { validateUiScopeShape, validateUiSourceShape, validateUiSpecificationShape } from './uiTestDesignContract.js';
+import { validateUiObservedPlanShape } from './uiObservedPlanGuard.js';
 
 function contractError(error) {
   if (error instanceof TestRegistryError) throw error;
@@ -25,10 +26,12 @@ export async function validateUiCompilation(compilation, scope) {
   fields(compilation, ['contractVersion', 'compilerVersion', 'outcome', 'source', 'specification', 'specificationHash', 'summary', 'executionPerformed'], [], 'compilation');
   const canonical = canonicalUiJson(compilation);
   if (uiByteLength(canonical) > UI_COMPILATION_MAX_BYTES) throw new TestRegistryError('UI compilation exceeds 768 KiB; dependencies must not be truncated.', { code: 'UI_TEST_DESIGN_COMPILATION_TOO_LARGE', status: 413 });
-  if (compilation.contractVersion !== 'qagent.ui-test-design-compilation.v1' || compilation.compilerVersion !== 'qagent_ui_test_design_compiler_v1'
+  const isPlan = compilation.compilerVersion === 'qagent_ui_test_design_compiler_v2';
+  if (compilation.contractVersion !== (isPlan ? 'qagent.ui-test-design-compilation.v2' : 'qagent.ui-test-design-compilation.v1')
+    || !['qagent_ui_test_design_compiler_v1', 'qagent_ui_test_design_compiler_v2'].includes(compilation.compilerVersion)
     || compilation.executionPerformed !== false) throw new TestRegistryError('Unsupported UI compilation contract.', { code: 'UI_TEST_DESIGN_CONTRACT_INVALID', status: 422 });
   if (compilation.outcome !== 'COMPILED') throw new TestRegistryError('Only a compiled UI Test Design can be versioned; NO_DESIGN remains a job outcome.', { code: 'UI_TEST_DESIGN_NOT_COMPILED', status: 422 });
-  try { validateUiSourceShape(compilation.source); validateUiSpecificationShape(compilation.specification); }
+  try { validateUiSourceShape(compilation.source); (isPlan ? validateUiObservedPlanShape : validateUiSpecificationShape)(compilation.specification); }
   catch (error) { contractError(error); }
   same(compilation.source.scope, scope, 'compilation.source.scope');
   same(compilation.specification.scope, scope, 'compilation.specification.scope');
@@ -40,7 +43,9 @@ export async function validateUiCompilation(compilation, scope) {
   if (uiByteLength(canonicalUiJson(compilation.summary)) > 65536) throw new TestRegistryError('UI compilation summary exceeds its limit.', { code: 'UI_TEST_DESIGN_SUMMARY_TOO_LARGE', status: 413 });
   const hash = await uiContentHash(compilation.specification);
   if (!/^[a-f0-9]{64}$/.test(compilation.specificationHash || '') || hash !== compilation.specificationHash) throw new TestRegistryError('UI specification hash does not match its canonical content.', { code: 'UI_TEST_DESIGN_HASH_MISMATCH', status: 409 });
-  for (const fixture of compilation.specification.network.fixtures) {
+  // A v2 plan pins the immutable source; fixture records are resolved and checked
+  // by qagent-ui when reading pages. Legacy expanded specifications keep their checks.
+  for (const fixture of isPlan ? [] : compilation.specification.network.fixtures) {
     const request = fixture.request;
     const fingerprint = await uiContentHash({ service: request.logicalServiceKey, origin: request.origin, method: request.method,
       path: request.path, query: request.query, bodyHash: request.bodySha256, businessHeadersHash: request.businessHeadersSha256 });
