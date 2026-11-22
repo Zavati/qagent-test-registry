@@ -2,7 +2,25 @@
 
 QAgent **Test Artifact Plane** introduced by Foundation **07.6.5**.
 
-Current implementation level: **07.6.5-F — Production Validation + Runner Contract Freeze**.
+Current package: **0.6.0 — additive UI-TD-2 Registry**. Existing API/Runner contracts remain unchanged.
+
+## UI Test Designs
+
+The existing Registry now owns a separate UI domain, with exact source references and no
+synthetic `endpointId`. See [UI-TD-2 contracts and application instructions](docs/UI-TD-2-REGISTRY.md).
+
+```http
+POST /v1/test-registry/ui-test-designs/versions
+GET  /v1/test-registry/ui-test-designs/versions/:versionId?organizationId=...&projectId=...&environmentId=...
+GET  /v1/test-registry/projects/:projectId/ui-test-designs?organizationId=...&environmentId=...&cursor=...&limit=20
+```
+
+These additive routes require the shared Generation HMAC, including path/query/raw body
+and tenant headers. Configure `TEST_GENERATION_INTERNAL_HMAC_SECRET` before using them.
+The API routes documented below retain their original contracts and authentication.
+Publication stores a deterministic design; it does not execute UI, produce PASS, or
+establish current source access. The authenticated Gateway rechecks source access before
+publication and before returning the design to a user.
 
 ## Responsibility
 

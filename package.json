@@ -1,6 +1,6 @@
 {
   "name": "qagent-test-registry",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "QAgent Test Artifact Plane - immutable Test Designs and Suite definitions.",
@@ -48,7 +48,9 @@
     "test:f08-1-7-c": "node --test test/readiness-derivation-08.1.7-c.test.mjs",
     "test:f08-1-7-c-fix2": "node --test test/status-coverage-08.1.7-c-fix2.test.mjs",
     "test:f08-1-8": "node --test test/autonomous-policy-08.1.8.test.mjs",
-    "test:f08-1-8-fix4": "node --test test/baseline-expiry-08.1.8-fix4.test.mjs"
+    "test:f08-1-8-fix4": "node --test test/baseline-expiry-08.1.8-fix4.test.mjs",
+    "test:ui-td2": "node --test test/ui-test-design-registry.test.mjs",
+    "check:ui-td2": "npm test && npm run check:deploy-config"
   },
   "engines": {
     "node": ">=24"

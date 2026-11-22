@@ -1,4 +1,5 @@
 import { projectTestReadinessRoute, endpointTestReadinessScenariosRoute } from './routes/testReadinessRoutes.js';
+import { appendUiVersionRoute, exactUiVersionRoute, listUiVersionsRoute } from './routes/uiTestDesignRoutes.js';
 import { asTestRegistryError } from "./domain/errors.js";
 import {
   appendVersionRoute,
@@ -134,6 +135,24 @@ export async function handleRequest(request, env = {}) {
     if (url.pathname === "/v1/test-registry/health") {
       if (request.method !== "GET") return methodNotAllowed(["GET"]);
       return json(buildHealthPayload(env), { status: 200 });
+    }
+
+    if (url.pathname === '/v1/test-registry/ui-test-designs/versions') {
+      if (request.method !== 'POST') return methodNotAllowed(['POST']);
+      const result = await appendUiVersionRoute(request, env);
+      return json(result.body, { status: result.status });
+    }
+    const uiVersion = url.pathname.match(/^\/v1\/test-registry\/ui-test-designs\/versions\/([^/]+)$/);
+    if (uiVersion) {
+      if (request.method !== 'GET') return methodNotAllowed(['GET']);
+      const result = await exactUiVersionRoute(request, env, { versionId: decodeURIComponent(uiVersion[1]) });
+      return json(result.body, { status: result.status });
+    }
+    const uiList = url.pathname.match(/^\/v1\/test-registry\/projects\/([^/]+)\/ui-test-designs$/);
+    if (uiList) {
+      if (request.method !== 'GET') return methodNotAllowed(['GET']);
+      const result = await listUiVersionsRoute(request, env, { projectId: decodeURIComponent(uiList[1]) });
+      return json(result.body, { status: result.status });
     }
 
     if (url.pathname === "/v1/test-registry/test-designs/versions") {
